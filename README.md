@@ -1,1 +1,35 @@
-# datadog-drilldown
+# dd-rca (Datadog Seeded RCA)
+
+Python CLI + library for **seeded incident analysis** starting from a Datadog **monitor** or **logs** query.
+
+## Quickstart
+
+### Install (dev)
+
+```bash
+python -m pip install -e ".[dev]"
+```
+
+### Configure
+
+Set environment variables:
+
+```bash
+export DD_API_KEY="..."
+export DD_APP_KEY="..."
+export DD_SITE="datadoghq.com"  # optional
+```
+
+### Run from a monitor
+
+```bash
+dd-rca from-monitor --monitor-id 123456 --window-minutes 60 --baseline-minutes 60 --markdown
+```
+
+### Run from logs
+
+```bash
+dd-rca from-logs --log-query 'service:api env:prod @status:error' --window-minutes 30 --baseline-minutes 30 --markdown
+```
+
+Reports are written under `./dd-rca-out/` by default.
