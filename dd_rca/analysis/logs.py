@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import hashlib
 import re
-from dataclasses import dataclass
-from datetime import UTC, datetime
 from typing import Any, Dict, List, Optional, Tuple
 
 from ..models import LogCluster
@@ -56,7 +54,35 @@ def cluster_logs(logs: List[Dict[str, Any]]) -> Dict[str, LogCluster]:
     for item in logs or []:
         attrs = item.get("attributes") or {}
         message = attrs.get("message") or attrs.get("msg") or ""
-        template = normalize_message(_safe_str(message))
+
+        # Prefer structured error fields when present (better clustering than raw message).
+        # Common shapes:
+        # - error.type / error.message / error.stack
+        # - exception / stack_trace
+        err_type = attrs.get("error.type") or attrs.get("error", {}).get("type") if isinstance(attrs.get("error"), dict) else None
+        err_msg = attrs.get("error.message") or attrs.get("error", {}).get("message") if isinstance(attrs.get("error"), dict) else None
+        err_stack = attrs.get("error.stack") or attrs.get("error", {}).get("stack") if isinstance(attrs.get("error"), dict) else None
+
+        if not err_type and isinstance(attrs.get("exception"), str):
+            err_type = attrs.get("exception")
+        if not err_stack and isinstance(attrs.get("stack_trace"), str):
+            err_stack = attrs.get("stack_trace")
+
+        template_parts = []
+        if err_type:
+            template_parts.append(f"type={normalize_message(_safe_str(err_type))}")
+        if err_msg:
+            template_parts.append(f"msg={normalize_message(_safe_str(err_msg))}")
+        else:
+            template_parts.append(f"msg={normalize_message(_safe_str(message))}")
+
+        stack_hash = None
+        if isinstance(err_stack, str) and err_stack.strip():
+            # hash full stack, but keep the template short
+            stack_hash = hashlib.sha1(err_stack.encode("utf-8", errors="ignore")).hexdigest()[:12]
+            template_parts.append(f"stack={stack_hash}")
+
+        template = " | ".join([p for p in template_parts if p])[:500]
         fp = fingerprint(template)
 
         ts = _log_timestamp_iso(item)
@@ -68,6 +94,9 @@ def cluster_logs(logs: List[Dict[str, Any]]) -> Dict[str, LogCluster]:
                 "service": attrs.get("service"),
                 "host": attrs.get("host"),
                 "message": _safe_str(message)[:1000],
+                "error_type": _safe_str(err_type)[:200] if err_type else None,
+                "error_message": _safe_str(err_msg)[:500] if err_msg else None,
+                "stack_hash": stack_hash,
             }
             clusters[fp] = LogCluster(
                 fingerprint=fp,

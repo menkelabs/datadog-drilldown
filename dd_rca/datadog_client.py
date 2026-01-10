@@ -114,3 +114,39 @@ class DatadogClient:
             cursor = after
         return logs
 
+    def search_spans(
+        self,
+        *,
+        query: str,
+        start_iso: str,
+        end_iso: str,
+        limit: int = 1000,
+        max_pages: int = 2,
+    ) -> List[Dict[str, Any]]:
+        """
+        Best-effort APM Events (spans) search.
+
+        Datadog's APM search APIs vary by plan/site; callers must handle DatadogError.
+        """
+        _, v2 = _base_urls(self.cfg.site)
+        url = f"{v2}/apm/events/search"
+        spans: List[Dict[str, Any]] = []
+        cursor: Optional[str] = None
+        for _ in range(max_pages):
+            body: Dict[str, Any] = {
+                "filter": {"from": start_iso, "to": end_iso, "query": query},
+                "sort": "timestamp",
+                "page": {"limit": min(int(limit), 1000)},
+            }
+            if cursor:
+                body["page"]["cursor"] = cursor
+            resp = self._request("POST", url, json_body=body)
+            data = resp.get("data") or []
+            spans.extend(data)
+            meta = resp.get("meta") or {}
+            after = ((meta.get("page") or {}).get("after")) if isinstance(meta, dict) else None
+            if not after:
+                break
+            cursor = after
+        return spans
+

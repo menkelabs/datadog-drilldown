@@ -1,3 +1,15 @@
+Metadata-Version: 2.4
+Name: dd-rca
+Version: 0.1.0
+Summary: Seeded incident analysis for Datadog monitors and logs
+Author: dd-rca contributors
+License: MIT
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: requests>=2.32.3
+Provides-Extra: dev
+Requires-Dist: pytest>=8.3.3; extra == "dev"
+
 # dd-rca (Datadog Seeded RCA)
 
 Python CLI + library for **seeded incident analysis** starting from a Datadog **monitor** or **logs** query.
@@ -30,12 +42,6 @@ dd-rca from-monitor --monitor-id 123456 --window-minutes 60 --baseline-minutes 6
 
 ```bash
 dd-rca from-logs --log-query 'service:api env:prod @status:error' --window-minutes 30 --baseline-minutes 30 --markdown
-```
-
-### Run from a service window
-
-```bash
-dd-rca from-service --service api --env prod --start '2026-01-10T12:00:00Z' --end '2026-01-10T13:00:00Z' --mode latency --markdown
 ```
 
 Reports are written under `./dd-rca-out/` by default.

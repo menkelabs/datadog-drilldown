@@ -1,0 +1,2 @@
+[console_scripts]
+dd-rca = dd_rca.cli:main
