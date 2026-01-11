@@ -12,7 +12,9 @@ from .analysis.scoring import score_log_clusters
 from .datadog_client import DatadogClient, DatadogError
 from .models import Candidate, Report, Symptom
 from .scope import Scope, scope_from_logs, scope_from_monitor
-from .windows import TimeWindow, Windows, windows_ending_at
+from datetime import timedelta
+
+from .windows import TimeWindow, Windows, _parse_ts, windows_ending_at
 
 
 def _now_iso() -> str:
@@ -207,11 +209,11 @@ def analyze_from_service(
     end: str,
     mode: str = "latency",
 ) -> Report:
-    inc = TimeWindow(start=__import__("dd_rca.windows", fromlist=["_parse_ts"])._parse_ts(start), end=__import__("dd_rca.windows", fromlist=["_parse_ts"])._parse_ts(end))
+    inc = TimeWindow(start=_parse_ts(start), end=_parse_ts(end))
     if inc.end <= inc.start:
         raise ValueError("end must be after start")
     duration_s = int((inc.end - inc.start).total_seconds())
-    baseline = TimeWindow(start=inc.start - __import__("datetime").timedelta(seconds=duration_s), end=inc.start)
+    baseline = TimeWindow(start=inc.start - timedelta(seconds=duration_s), end=inc.start)
     windows = Windows(incident=inc, baseline=baseline, anchor=inc.end)
 
     scope = Scope(service=service, env=env)
