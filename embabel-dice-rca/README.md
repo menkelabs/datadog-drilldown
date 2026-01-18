@@ -360,6 +360,84 @@ rca> What's the normal baseline for this metric?
 
 ---
 
+## Datadog MCP Tools
+
+The module provides MCP (Model Context Protocol) tools that the LLM agent can call directly during investigation:
+
+### Available Tools
+
+| Tool | Description |
+|------|-------------|
+| `datadog_search_logs` | Search logs for errors and patterns |
+| `datadog_query_metrics` | Query time series metrics |
+| `datadog_search_traces` | Search APM traces and analyze dependencies |
+| `datadog_get_events` | Get deployments, alerts, and config changes |
+| `datadog_get_monitor` | Get monitor details and status |
+| `datadog_compare_periods` | Compare incident vs baseline metrics |
+
+### Example Tool Usage by Agent
+
+During investigation, the agent autonomously calls these tools:
+
+```
+Agent: I'll search for error logs in the checkout service...
+       [Calling datadog_search_logs(query="@status:error", service="checkout", env="prod")]
+
+Tool Response:
+{
+  "success": true,
+  "totalCount": 847,
+  "topPatterns": [
+    {"pattern": "Connection pool exhausted after <NUM>ms", "count": 523},
+    {"pattern": "ORA-00060: deadlock detected", "count": 89}
+  ]
+}
+
+Agent: I found 847 errors. The top pattern is connection pool exhaustion.
+       Let me compare the current latency against the baseline...
+       [Calling datadog_compare_periods(query="p95:trace.checkout.duration{env:prod}")]
+
+Tool Response:
+{
+  "success": true,
+  "baseline": {"average": 52.3},
+  "incident": {"average": 487.2},
+  "percentChange": 831.5,
+  "assessment": "CRITICAL: 831% increase"
+}
+```
+
+### Tool Definitions (for MCP clients)
+
+```json
+{
+  "tools": [
+    {
+      "name": "datadog_search_logs",
+      "description": "Search Datadog logs for errors and patterns",
+      "parameters": {
+        "query": {"type": "string", "description": "Datadog log query"},
+        "service": {"type": "string", "description": "Service name filter"},
+        "env": {"type": "string", "description": "Environment filter"},
+        "minutesBack": {"type": "integer", "default": 30},
+        "limit": {"type": "integer", "default": 100}
+      }
+    },
+    {
+      "name": "datadog_compare_periods",
+      "description": "Compare metrics between incident and baseline periods",
+      "parameters": {
+        "query": {"type": "string", "description": "Datadog metric query"},
+        "incidentMinutes": {"type": "integer", "default": 30},
+        "baselineMinutes": {"type": "integer", "default": 30}
+      }
+    }
+  ]
+}
+```
+
+---
+
 ## Integration with Dice
 
 The module supports Dice data ingestion for automated incident triggering:
