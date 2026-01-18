@@ -1,0 +1,44 @@
+@startuml C4_Container
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+LAYOUT_WITH_LEGEND()
+
+title Container Diagram - Embabel Dice RCA
+
+Person(sre, "SRE / On-Call Engineer", "Investigates incidents")
+
+System_Boundary(rca_system, "Embabel Dice RCA System") {
+    Container(shell, "Agent Shell", "Kotlin / Spring Boot", "Interactive CLI for incident investigation conversations")
+    
+    Container(embabel_agent, "Incident Investigator Agent", "Embabel Framework", "AI agent that orchestrates investigation workflow using goals, actions, and conditions")
+    
+    Container(mcp_tools, "Datadog MCP Tools", "Kotlin / @LlmTool", "Tools callable by LLM to query Datadog APIs")
+    
+    Container(dice_ingestion, "Dice Ingestion Service", "Kotlin / Spring", "Ingests alerts, anomalies, and log streams to trigger investigations")
+    
+    Container(datadog_client, "Datadog Client", "Kotlin / WebClient", "HTTP client for Datadog REST API v1/v2")
+    
+    Container(analysis_engine, "Analysis Engine", "Kotlin", "Log clustering, metric analysis, APM correlation, scoring")
+    
+    ContainerDb(incident_store, "Incident Store", "In-Memory", "Active incidents and chat history")
+}
+
+System_Ext(datadog, "Datadog", "Observability Platform")
+System_Ext(llm, "LLM Provider", "OpenAI / Anthropic / Ollama")
+System_Ext(alerting, "Alerting System", "PagerDuty / Datadog Alerts")
+
+Rel(sre, shell, "Describes incident", "CLI")
+Rel(shell, embabel_agent, "Invokes agent", "Spring")
+
+Rel(embabel_agent, mcp_tools, "Calls tools during analysis", "@LlmTool")
+Rel(embabel_agent, llm, "Sends prompts", "API")
+Rel(embabel_agent, analysis_engine, "Uses for evidence analysis", "")
+
+Rel(mcp_tools, datadog_client, "Uses for API calls", "")
+Rel(datadog_client, datadog, "Queries data", "REST API")
+
+Rel(alerting, dice_ingestion, "Sends alerts", "Webhook")
+Rel(dice_ingestion, embabel_agent, "Triggers investigation", "")
+Rel(dice_ingestion, incident_store, "Stores incidents", "")
+
+@enduml

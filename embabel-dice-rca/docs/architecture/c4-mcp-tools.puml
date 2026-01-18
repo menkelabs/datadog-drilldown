@@ -1,0 +1,54 @@
+@startuml C4_MCP_Tools
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+LAYOUT_WITH_LEGEND()
+
+title Component Diagram - Datadog MCP Tools
+
+Container_Boundary(tools, "DatadogTools (@Component)") {
+    
+    Component(search_logs, "datadog_search_logs", "@LlmTool", "Search Datadog logs for errors and patterns\n\nParams:\n- query: Datadog log query\n- service: Service filter\n- env: Environment filter\n- minutesBack: Time window\n- limit: Max results\n\nReturns: LogSearchResult with\ntopPatterns, errorCount")
+    
+    Component(query_metrics, "datadog_query_metrics", "@LlmTool", "Query Datadog metrics\n\nParams:\n- query: Metric query\n- minutesBack: Time window\n\nReturns: MetricQueryResult with\navg, min, max, peak")
+    
+    Component(search_traces, "datadog_search_traces", "@LlmTool", "Search APM traces\n\nParams:\n- service: Service name\n- env: Environment\n- resource: Endpoint filter\n- errorsOnly: Filter errors\n\nReturns: TraceSearchResult with\ntopEndpoints, topDependencies")
+    
+    Component(get_events, "datadog_get_events", "@LlmTool", "Get recent events\n\nParams:\n- service: Service filter\n- env: Environment filter\n- eventType: deploy/alert/config\n\nReturns: EventSearchResult with\ndeployments, configChanges")
+    
+    Component(get_monitor, "datadog_get_monitor", "@LlmTool", "Get monitor details\n\nParams:\n- monitorId: Datadog monitor ID\n\nReturns: MonitorResult with\nname, query, state")
+    
+    Component(compare_periods, "datadog_compare_periods", "@LlmTool", "Compare incident vs baseline\n\nParams:\n- query: Metric query\n- incidentMinutes: Incident window\n- baselineMinutes: Baseline window\n\nReturns: ComparisonResult with\npercentChange, assessment")
+}
+
+Container_Boundary(client, "DatadogClient") {
+    Component(dd_client, "DatadogClient", "Interface", "HTTP client for Datadog API")
+}
+
+Container_Boundary(analysis, "Analysis Helpers") {
+    Component(log_analyzer, "LogAnalyzer", "Service", "Fingerprinting and clustering")
+    Component(stats, "SpanStats", "Utility", "P50/P95/P99 calculations")
+}
+
+System_Ext(datadog_api, "Datadog REST API", "v1 and v2 endpoints")
+System_Ext(llm, "LLM", "Calls tools during prompts")
+
+Rel(llm, search_logs, "calls")
+Rel(llm, query_metrics, "calls")
+Rel(llm, search_traces, "calls")
+Rel(llm, get_events, "calls")
+Rel(llm, get_monitor, "calls")
+Rel(llm, compare_periods, "calls")
+
+Rel(search_logs, dd_client, "uses")
+Rel(query_metrics, dd_client, "uses")
+Rel(search_traces, dd_client, "uses")
+Rel(get_events, dd_client, "uses")
+Rel(get_monitor, dd_client, "uses")
+Rel(compare_periods, dd_client, "uses")
+
+Rel(search_logs, log_analyzer, "uses")
+Rel(search_traces, stats, "uses")
+
+Rel(dd_client, datadog_api, "HTTP", "REST")
+
+@enduml

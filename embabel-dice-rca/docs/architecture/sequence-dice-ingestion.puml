@@ -1,0 +1,47 @@
+@startuml Dice_Ingestion_Sequence
+!theme plain
+
+title Dice Alert Ingestion Sequence
+
+participant "Datadog\nMonitor" as monitor
+participant "Webhook\nEndpoint" as webhook
+participant "DiceIngestionService" as dice
+participant "IncidentStore" as store
+participant "RcaAgent" as rca
+participant "Event Bus" as events
+
+== Alert Trigger ==
+monitor -> webhook: POST /dice/alerts\n{\n  alertType: MONITOR_ALERT,\n  monitorId: 12345,\n  service: "checkout",\n  severity: HIGH\n}
+
+webhook -> dice: ingestAlert(AlertTrigger)
+
+== Incident Creation ==
+dice -> dice: generateIncidentId()\n"INC-A1B2C3D4"
+
+dice -> dice: createWindowsFromAlert()\nincident: now-30m to now\nbaseline: now-60m to now-30m
+
+dice -> store: store(IncidentContext)
+store --> dice: OK
+
+== Event Publishing ==
+dice -> events: publish(AlertIngestedEvent)
+events --> dice: OK
+
+== Analysis Trigger ==
+alt severity <= WARNING
+    dice -> rca: startAnalysis(IncidentContext)
+    
+    rca -> rca: analyzeLogs()
+    rca -> rca: analyzeApm()
+    rca -> rca: collectEvents()
+    rca -> rca: scoreAndRank()
+    
+    rca --> dice: Report
+end
+
+dice --> webhook: IngestionResult(\n  success: true,\n  incidentId: "INC-A1B2C3D4",\n  analysisTriggered: true\n)
+
+== Subsequent Events ==
+note over dice: Log streams and metric anomalies\ncan correlate with existing incidents\nby service/env/time window
+
+@enduml

@@ -1,0 +1,80 @@
+@startuml Agent_Workflow
+!theme plain
+
+title Embabel Agent Workflow - Incident Investigation
+
+start
+
+:User Input;
+note right: "checkout-service latency spike..."
+
+:categorizeIncident;
+note right
+  @Action
+  Uses fast LLM
+  Returns: IncidentCategorization
+end note
+
+:parseIncidentRequest;
+note right
+  @Action
+  Extracts: service, env, timeframe
+  Returns: IncidentRequest
+end note
+
+:collectDatadogEvidence;
+note right
+  @Action
+  LLM calls MCP tools:
+  - datadog_search_logs
+  - datadog_query_metrics
+  - datadog_search_traces
+  - datadog_get_events
+  - datadog_compare_periods
+  Returns: DatadogEvidence
+end note
+
+if (EVIDENCE_COLLECTED?) then (yes)
+  :analyzeRootCause;
+  note right
+    @Action
+    LLM reasoning on evidence
+    Can call tools for follow-up
+    Returns: RootCauseAnalysis
+  end note
+else (no)
+  :Insufficient data;
+  stop
+endif
+
+if (ANALYSIS_COMPLETE?) then (yes)
+  :critiqueAnalysis;
+  note right
+    @Action
+    Self-review for quality
+    Returns: AnalysisCritique
+  end note
+else (no)
+  :Analysis incomplete;
+  stop
+endif
+
+if (ANALYSIS_SATISFACTORY?) then (yes)
+  :generateReport;
+  note right
+    @Action @AchievesGoal
+    Final recommendations
+    Returns: InvestigationReport
+  end note
+  
+  :Goal Achieved!;
+  note right: Investigation complete
+  stop
+else (no)
+  note right: ANALYSIS_UNSATISFACTORY
+  :Retry analyzeRootCause;
+  note right: canRerun = true
+  backward :analyzeRootCause;
+endif
+
+@enduml

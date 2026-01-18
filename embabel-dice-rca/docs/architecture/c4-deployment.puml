@@ -1,0 +1,49 @@
+@startuml C4_Deployment
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Deployment.puml
+
+LAYOUT_WITH_LEGEND()
+
+title Deployment Diagram - Embabel Dice RCA
+
+Deployment_Node(dev_machine, "Developer Machine", "macOS / Linux") {
+    Deployment_Node(jvm, "JVM 21", "OpenJDK") {
+        Container(rca_app, "embabel-dice-rca", "Spring Boot 3.2", "Incident investigation agent")
+    }
+}
+
+Deployment_Node(cloud, "Cloud Environment", "AWS / GCP / Azure") {
+    Deployment_Node(k8s, "Kubernetes Cluster", "EKS / GKE / AKS") {
+        Deployment_Node(pod, "RCA Pod", "Container") {
+            Container(rca_prod, "embabel-dice-rca", "Docker Image", "Production deployment")
+        }
+    }
+    
+    Deployment_Node(secrets, "Secrets Manager", "Vault / AWS SM") {
+        ContainerDb(creds, "Credentials", "Encrypted", "DD_API_KEY\nDD_APP_KEY\nOPENAI_API_KEY")
+    }
+}
+
+Deployment_Node(datadog_cloud, "Datadog Cloud", "datadoghq.com") {
+    System_Ext(dd_api, "Datadog API", "REST API v1/v2")
+    SystemDb_Ext(dd_data, "Telemetry Data", "Logs, Metrics, Traces, Events")
+}
+
+Deployment_Node(llm_cloud, "LLM Provider", "OpenAI / Anthropic") {
+    System_Ext(llm_api, "LLM API", "Chat Completions")
+}
+
+Deployment_Node(local_llm, "Local LLM (Optional)", "Developer Machine") {
+    System_Ext(ollama, "Ollama", "Local model serving")
+}
+
+Rel(rca_app, dd_api, "HTTPS", "REST API")
+Rel(rca_app, llm_api, "HTTPS", "API")
+Rel(rca_app, ollama, "HTTP", "localhost:11434")
+
+Rel(rca_prod, dd_api, "HTTPS", "REST API")
+Rel(rca_prod, llm_api, "HTTPS", "API")
+Rel(rca_prod, creds, "mTLS", "Secrets injection")
+
+Rel(dd_api, dd_data, "Internal")
+
+@enduml

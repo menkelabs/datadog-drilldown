@@ -1,0 +1,69 @@
+@startuml Investigation_Sequence
+!theme plain
+
+title Incident Investigation Sequence
+
+actor "SRE" as sre
+participant "Agent Shell" as shell
+participant "IncidentInvestigatorAgent" as agent
+participant "LLM Provider" as llm
+participant "Datadog MCP Tools" as tools
+participant "Datadog API" as datadog
+
+== Incident Report ==
+sre -> shell: "checkout-service latency spike\nafter deploy v2.5.0"
+shell -> agent: invoke(UserInput)
+
+== Categorization ==
+agent -> llm: categorizeIncident prompt
+llm --> agent: IncidentCategorization(LATENCY)
+
+agent -> llm: parseIncidentRequest prompt
+llm --> agent: IncidentRequest(service=checkout, env=prod)
+
+== Evidence Collection (LLM uses MCP Tools) ==
+agent -> llm: collectDatadogEvidence prompt\n"Use Datadog tools to gather evidence..."
+
+llm -> tools: datadog_search_logs(service=checkout, env=prod)
+tools -> datadog: POST /api/v2/logs/events/search
+datadog --> tools: logs[]
+tools --> llm: LogSearchResult(topPatterns=[...])
+
+llm -> tools: datadog_query_metrics("p95:trace.checkout.duration")
+tools -> datadog: GET /api/v1/query
+datadog --> tools: series[]
+tools --> llm: MetricQueryResult(avg=487ms)
+
+llm -> tools: datadog_search_traces(service=checkout, errorsOnly=true)
+tools -> datadog: POST /api/v2/apm/events/search
+datadog --> tools: spans[]
+tools --> llm: TraceSearchResult(slowEndpoints=[...])
+
+llm -> tools: datadog_get_events(service=checkout, eventType=deploy)
+tools -> datadog: GET /api/v1/events
+datadog --> tools: events[]
+tools --> llm: EventSearchResult(deployments=1)
+
+llm -> tools: datadog_compare_periods(incidentMinutes=30)
+tools -> datadog: GET /api/v1/query (x2)
+datadog --> tools: baseline + incident metrics
+tools --> llm: ComparisonResult(+831% latency)
+
+llm --> agent: DatadogEvidence(summary="...")
+
+== Root Cause Analysis ==
+agent -> llm: analyzeRootCause prompt\n"Based on evidence, identify candidates..."
+llm --> agent: RootCauseAnalysis(\n  primarySuspect="Connection pool exhaustion",\n  confidence=0.87\n)
+
+== Self-Critique ==
+agent -> llm: critiqueAnalysis prompt
+llm --> agent: AnalysisCritique(accepted=true)
+
+== Report Generation ==
+agent -> llm: generateReport prompt
+llm --> agent: InvestigationReport(\n  summary="...",\n  recommendations=[...],\n  severity=HIGH\n)
+
+agent --> shell: InvestigationReport
+shell --> sre: Display formatted report
+
+@enduml
