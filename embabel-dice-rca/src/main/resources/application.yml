@@ -4,6 +4,60 @@ spring:
   main:
     banner-mode: off
 
+# Embabel Agent Configuration
+embabel:
+  # RCA Agent specific settings
+  rca:
+    analysis-model: gpt-4o
+    fast-model: gpt-4o-mini
+    max-candidates: 10
+    default-window-minutes: 30
+    default-baseline-minutes: 30
+
+  # Agent framework settings
+  agent:
+    # Default agent to run
+    default-agent: incidentInvestigatorAgent
+
+  # Shell configuration for interactive mode
+  shell:
+    enabled: true
+    prompt: "rca> "
+    welcome-message: |
+      
+      ========================================
+      Embabel RCA Agent - Incident Investigator
+      ========================================
+      
+      Describe your incident and I'll help investigate the root cause.
+      
+      Example queries:
+        - "API latency spiked to 500ms in production for the checkout service"
+        - "Error rate increased for payment-service after the latest deploy"
+        - "Users reporting timeouts on the order API"
+      
+      Type 'help' for available commands.
+      Type 'exit' to quit.
+      
+      ----------------------------------------
+
+# OpenAI Configuration (set OPENAI_API_KEY env var)
+spring.ai:
+  openai:
+    api-key: ${OPENAI_API_KEY:}
+    chat:
+      options:
+        model: gpt-4o
+        temperature: 0.3
+
+# Anthropic Configuration (optional, set ANTHROPIC_API_KEY env var)
+  anthropic:
+    api-key: ${ANTHROPIC_API_KEY:}
+
+# Ollama Configuration (for local models)
+  ollama:
+    base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
+
 # Datadog Configuration
 datadog:
   api-key: ${DD_API_KEY:}
@@ -11,12 +65,6 @@ datadog:
   site: ${DD_SITE:datadoghq.com}
   timeout-seconds: 30
   max-retries: 3
-
-# Embabel AI Configuration
-embabel:
-  api-key: ${EMBABEL_API_KEY:}
-  model: ${EMBABEL_MODEL:gpt-4}
-  temperature: 0.3
 
 # Dice Ingestion Configuration
 dice:
@@ -33,9 +81,17 @@ logging:
   level:
     root: INFO
     com.example.rca: DEBUG
+    com.embabel: INFO
   pattern:
     console: "%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
 
-# Server (optional, for REST API)
+# Server (for REST API if needed)
 server:
   port: 8080
+
+# Actuator endpoints
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
