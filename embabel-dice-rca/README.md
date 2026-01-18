@@ -88,7 +88,7 @@ rca> The checkout-service in production is showing P95 latency of 800ms after
 3. **Analyzes** patterns:
    - Finds new error pattern: "Connection pool exhausted after 5000ms"
    - Correlates with deploy event 15 minutes ago
-   - Identifies postgres dependency showing 10x latency increase
+   - Identifies Oracle database dependency showing 10x latency increase
 4. **Generates report**:
 
 ```
@@ -224,8 +224,8 @@ The client.close() call is missing in the finally block.
 
 ```
 rca> We're seeing intermittent 500 errors on POST /orders endpoint.
-     About 10-20 per hour, random timing. Error logs mention "deadlock detected".
-     This is order-service in production, using PostgreSQL.
+     About 10-20 per hour, random timing. Error logs mention "ORA-00060 deadlock detected".
+     This is order-service in production, using Oracle.
 ```
 
 **Agent Investigation**:
@@ -239,16 +239,17 @@ inventory and payment records in different order. Classic lock ordering issue.
 **Root Cause**: Transaction lock ordering conflict
 - Confidence: 85%
 - Evidence:
-  - 127 "deadlock detected" errors in last 6 hours
-  - Deadlocks occur between inventory_update and payment_record transactions
+  - 127 "ORA-00060: deadlock detected while waiting for resource" errors in last 6 hours
+  - Deadlocks occur between INVENTORY and PAYMENT_RECORDS table updates
   - 73% of deadlocks involve the same two tables
   - Correlation: Deadlock frequency increases with order volume
+  - Oracle trace files show TX enqueue waits
 
 **Deadlock Pattern**:
 ```
-Transaction A: UPDATE inventory → UPDATE payments (waiting)
-Transaction B: UPDATE payments → UPDATE inventory (waiting)
-→ Deadlock!
+Session A: UPDATE INVENTORY → UPDATE PAYMENT_RECORDS (waiting for row lock)
+Session B: UPDATE PAYMENT_RECORDS → UPDATE INVENTORY (waiting for row lock)
+→ ORA-00060 Deadlock!
 ```
 
 **Affected Operations**:
@@ -256,16 +257,18 @@ Transaction B: UPDATE payments → UPDATE inventory (waiting)
 - PUT /orders/{id}/cancel (cancelOrder) - 38 deadlocks
 
 **Recommendations**:
-1. FIX: Ensure consistent lock ordering (always inventory before payments)
-2. FIX: Add retry logic with exponential backoff for deadlock errors
-3. OPTIMIZE: Consider using SELECT FOR UPDATE SKIP LOCKED for inventory
-4. MONITOR: Add deadlock counter metric and alert
+1. FIX: Ensure consistent lock ordering (always INVENTORY before PAYMENT_RECORDS)
+2. FIX: Add retry logic with exponential backoff for ORA-00060 errors
+3. OPTIMIZE: Consider using SELECT FOR UPDATE SKIP LOCKED for inventory checks
+4. MONITOR: Add V$LOCK monitoring and alert on deadlock graph detection
+5. TRACE: Enable Oracle deadlock trace (event 10046) for detailed analysis
 
 **Query Analysis**:
 The createOrder transaction should be refactored to:
-1. Lock inventory rows first (sorted by product_id)
-2. Then lock payment records
-3. Use NOWAIT or short lock_timeout to fail fast
+1. Lock INVENTORY rows first (ORDER BY PRODUCT_ID for consistent ordering)
+2. Then lock PAYMENT_RECORDS
+3. Use SELECT FOR UPDATE WAIT 3 to fail fast instead of indefinite wait
+4. Consider using DBMS_LOCK for application-level lock coordination
 ```
 
 ---
