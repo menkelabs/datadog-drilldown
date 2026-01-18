@@ -2,7 +2,7 @@
  * Embabel RCA Agent for Datadog Incident Investigation
  *
  * This agent uses the Embabel framework to provide AI-powered
- * root cause analysis for production incidents.
+ * root cause analysis for production incidents, using Datadog MCP tools.
  */
 package com.example.rca.agent
 
@@ -12,8 +12,8 @@ import com.embabel.agent.api.common.create
 import com.embabel.agent.domain.io.UserInput
 import com.embabel.common.ai.model.LlmOptions
 import com.embabel.common.ai.model.ModelProvider.Companion.CHEAPEST_ROLE
-import com.example.rca.datadog.DatadogClient
 import com.example.rca.domain.*
+import com.example.rca.mcp.DatadogTools
 import org.slf4j.LoggerFactory
 import org.springframework.boot.context.properties.ConfigurationProperties
 import java.time.Instant
@@ -51,23 +51,38 @@ data class IncidentCategorization(
 )
 
 /**
- * Evidence collected from Datadog.
+ * Evidence collected from Datadog via MCP tools.
  */
 data class DatadogEvidence(
-    val logClusters: List<LogCluster>,
-    val symptoms: List<Symptom>,
-    val events: List<String>,
-    val apmFindings: Map<String, Any>,
+    val logsSearched: Boolean,
+    val logPatterns: List<String>,
+    val errorCount: Int,
+    val metricsAnalyzed: Boolean,
+    val latencyChange: String?,
+    val errorRateChange: String?,
+    val tracesSearched: Boolean,
+    val slowEndpoints: List<String>,
+    val failingDependencies: List<String>,
+    val eventsFound: List<String>,
+    val recentDeployments: Int,
+    val summary: String,
 )
 
 /**
  * Analysis of the root cause candidates.
  */
 data class RootCauseAnalysis(
-    val candidates: List<Candidate>,
+    val candidates: List<RootCauseCandidate>,
     val primarySuspect: String,
     val confidence: Double,
     val reasoning: String,
+)
+
+data class RootCauseCandidate(
+    val title: String,
+    val category: String,
+    val score: Double,
+    val evidence: String,
 )
 
 /**
@@ -78,7 +93,7 @@ data class InvestigationReport(
     val rootCause: RootCauseAnalysis,
     val recommendations: List<String>,
     val nextSteps: List<String>,
-    val severity: Severity,
+    val severity: String,
 )
 
 /**
@@ -105,28 +120,33 @@ class RcaAgentProperties(
 /**
  * Embabel Agent for Root Cause Analysis of production incidents.
  *
- * This agent implements the Embabel model for autonomous incident investigation:
- * 1. Categorizes the incident type from user description
- * 2. Collects evidence from Datadog (logs, metrics, APM, events)
- * 3. Analyzes patterns and identifies root cause candidates
- * 4. Self-critiques the analysis for quality
- * 5. Generates actionable recommendations
+ * This agent uses Datadog MCP tools to gather evidence and AI reasoning
+ * to identify root causes. The workflow:
  *
- * The agent uses multi-model approach:
- * - Fast model for categorization and initial triage
- * - Advanced model for deep analysis and reasoning
+ * 1. Categorize incident from user description
+ * 2. Collect evidence using Datadog MCP tools (logs, metrics, traces, events)
+ * 3. Analyze patterns and identify root cause candidates
+ * 4. Self-critique for quality assurance
+ * 5. Generate actionable recommendations
+ *
+ * Tools available during investigation:
+ * - datadog_search_logs: Find error patterns
+ * - datadog_query_metrics: Analyze performance data
+ * - datadog_search_traces: Examine request flow and dependencies
+ * - datadog_get_events: Find recent deployments and changes
+ * - datadog_compare_periods: Compare incident vs baseline
  */
 @Agent(
-    description = "Investigate production incidents and identify root causes using Datadog telemetry data",
+    description = "Investigate production incidents and identify root causes using Datadog MCP tools",
 )
 class IncidentInvestigatorAgent(
     val properties: RcaAgentProperties,
-    val datadogClient: DatadogClient,
+    val datadogTools: DatadogTools,  // Injected for tool registration
 ) {
     private val logger = LoggerFactory.getLogger(IncidentInvestigatorAgent::class.java)
 
     init {
-        logger.info("IncidentInvestigatorAgent initialized with properties: $properties")
+        logger.info("IncidentInvestigatorAgent initialized with Datadog MCP tools")
     }
 
     /**
@@ -186,138 +206,61 @@ class IncidentInvestigatorAgent(
         )
 
     /**
-     * Collect evidence from Datadog based on the incident request.
-     * This is a code-based action that calls the Datadog API.
+     * Collect evidence from Datadog using MCP tools.
+     * The LLM decides which tools to call based on the incident context.
      */
-    @Action(post = [EVIDENCE_COLLECTED])
+    @Action(
+        post = [EVIDENCE_COLLECTED],
+    )
     fun collectDatadogEvidence(
         request: IncidentRequest,
         categorization: IncidentCategorization,
-    ): DatadogEvidence {
-        logger.info("Collecting Datadog evidence for ${request.service}/${request.env}")
+        context: OperationContext,
+    ): DatadogEvidence = context.ai()
+        .withLlm(properties.analysisModel)
+        .create(
+            """
+            You are investigating a production incident. Use the Datadog tools to collect evidence.
 
-        val now = Instant.now()
-        val endTime = request.endTime ?: now
-        val startTime = request.startTime
-            ?: endTime.minusSeconds(properties.defaultWindowMinutes.toLong() * 60)
+            ## Incident Context
+            - Service: ${request.service ?: "unknown (search broadly)"}
+            - Environment: ${request.env ?: "prod"}
+            - Category: ${categorization.category}
+            - Description: ${request.description}
+            - Time window: Last ${properties.defaultWindowMinutes} minutes
 
-        val windows = Windows.fromRange(startTime, endTime)
-        val scope = Scope(service = request.service, env = request.env)
+            ## Available Tools
+            Use these Datadog MCP tools to gather evidence:
 
-        // Collect logs
-        val logQuery = request.logQuery ?: buildDefaultLogQuery(scope, categorization)
-        val incidentLogs = try {
-            datadogClient.searchLogs(logQuery, windows.incident.start, windows.incident.end)
-        } catch (e: Exception) {
-            logger.warn("Failed to collect logs: ${e.message}")
-            emptyList()
-        }
+            1. **datadog_search_logs** - Search for error logs and patterns
+               Call with: service, env, query like "@status:error"
 
-        val baselineLogs = try {
-            datadogClient.searchLogs(logQuery, windows.baseline.start, windows.baseline.end)
-        } catch (e: Exception) {
-            emptyList()
-        }
+            2. **datadog_query_metrics** - Get latency, error rate, throughput metrics
+               Call with: metric queries like "avg:trace.request.duration{service:X}"
 
-        // Cluster logs
-        val logAnalyzer = com.example.rca.analysis.LogAnalyzer()
-        val clusters = logAnalyzer.clusterLogs(incidentLogs)
-        val mergedClusters = logAnalyzer.mergeBaselineCounts(clusters, baselineLogs)
-        val rankedClusters = logAnalyzer.rankClusters(mergedClusters, limit = 15)
+            3. **datadog_search_traces** - Analyze APM traces for slow endpoints and dependencies
+               Call with: service, env, optionally errorsOnly=true
 
-        // Create symptom from log volume
-        val symptoms = mutableListOf<Symptom>()
-        val volumeChange = if (baselineLogs.isNotEmpty()) {
-            ((incidentLogs.size - baselineLogs.size).toDouble() / baselineLogs.size) * 100
-        } else if (incidentLogs.isNotEmpty()) {
-            100.0
-        } else {
-            0.0
-        }
+            4. **datadog_get_events** - Find recent deployments, config changes, alerts
+               Call with: service, env, eventType like "deploy"
 
-        symptoms.add(Symptom(
-            type = SymptomType.LOG_SIGNATURE,
-            queryOrSignature = logQuery,
-            baselineValue = baselineLogs.size.toDouble(),
-            incidentValue = incidentLogs.size.toDouble(),
-            percentChange = volumeChange
-        ))
+            5. **datadog_compare_periods** - Compare incident metrics vs baseline
+               Call with: metric query, incidentMinutes, baselineMinutes
 
-        // Collect events
-        val events = try {
-            val eventResponse = datadogClient.searchEvents(
-                windows.incident.start,
-                windows.incident.end,
-                scope.toEventTagQuery()
-            )
-            eventResponse.events.take(10).map { "${it.title}: ${it.text.take(100)}" }
-        } catch (e: Exception) {
-            emptyList()
-        }
+            ## Your Task
+            1. Search logs for errors related to this incident
+            2. Query relevant metrics (latency for LATENCY issues, error counts for ERROR_RATE)
+            3. Search traces to identify slow endpoints or failing dependencies
+            4. Check for recent deployments or config changes
+            5. Compare current metrics against baseline
 
-        // Collect APM data if available
-        val apmFindings = if (scope.isApmReady()) {
-            collectApmFindings(scope, windows)
-        } else {
-            mapOf("enabled" to false, "reason" to "missing service/env")
-        }
-
-        return DatadogEvidence(
-            logClusters = rankedClusters,
-            symptoms = symptoms,
-            events = events,
-            apmFindings = apmFindings
+            Based on the tool results, summarize what you found as DatadogEvidence.
+        """.trimIndent()
         )
-    }
-
-    private fun buildDefaultLogQuery(scope: Scope, categorization: IncidentCategorization): String {
-        val parts = mutableListOf<String>()
-        scope.service?.let { parts.add("service:$it") }
-        scope.env?.let { parts.add("env:$it") }
-
-        when (categorization.category) {
-            IncidentCategory.ERROR_RATE -> {
-                parts.add("(@status:error OR status:error OR level:error OR @http.status_code:[500 TO 599])")
-            }
-            IncidentCategory.LATENCY -> {
-                parts.add("(@status:error OR status:warn OR @duration:>1000)")
-            }
-            else -> {
-                parts.add("(@status:error OR status:error OR level:error)")
-            }
-        }
-
-        return parts.joinToString(" ")
-    }
-
-    private fun collectApmFindings(scope: Scope, windows: Windows): Map<String, Any> {
-        val query = "service:${scope.service} env:${scope.env}"
-
-        return try {
-            val incidentSpans = datadogClient.searchSpans(
-                query,
-                windows.incident.start,
-                windows.incident.end
-            )
-            val baselineSpans = datadogClient.searchSpans(
-                query,
-                windows.baseline.start,
-                windows.baseline.end
-            )
-
-            mapOf<String, Any>(
-                "enabled" to true,
-                "incident_span_count" to incidentSpans.size,
-                "baseline_span_count" to baselineSpans.size
-            )
-        } catch (e: Exception) {
-            mapOf<String, Any>("enabled" to true, "error" to (e.message ?: "Unknown error"))
-        }
-    }
 
     /**
      * Analyze collected evidence to identify root cause candidates.
-     * Uses the advanced model for deep reasoning.
+     * Uses the advanced model for deep reasoning with access to tools for follow-up queries.
      */
     @Action(
         pre = [EVIDENCE_COLLECTED],
@@ -333,7 +276,7 @@ class IncidentInvestigatorAgent(
         .withLlm(properties.analysisModel)
         .create(
             """
-            Analyze the following evidence to identify root cause candidates for the incident.
+            Analyze the collected evidence to identify root cause candidates.
 
             ## Incident Context
             - Service: ${request.service ?: "unknown"}
@@ -341,40 +284,41 @@ class IncidentInvestigatorAgent(
             - Category: ${categorization.category}
             - Description: ${request.description}
 
-            ## Evidence
+            ## Evidence Collected
+            ${evidence.summary}
 
-            ### Log Patterns (${evidence.logClusters.size} clusters found)
-            ${evidence.logClusters.take(10).joinToString("\n") { cluster ->
-                """
-                - Pattern: ${cluster.template.take(100)}
-                  Count: ${cluster.countIncident} (baseline: ${cluster.countBaseline})
-                  Growth: ${if (cluster.isNewPattern) "NEW PATTERN" else "${cluster.growthRatio}x"}
-                """.trimIndent()
-            }}
+            ### Log Patterns
+            ${evidence.logPatterns.joinToString("\n") { "- $it" }}
+            Error count: ${evidence.errorCount}
 
-            ### Symptoms
-            ${evidence.symptoms.joinToString("\n") { symptom ->
-                "- ${symptom.type}: ${symptom.percentChange?.let { "%.1f%% change".format(it) } ?: "N/A"}"
-            }}
+            ### Metrics
+            - Latency change: ${evidence.latencyChange ?: "not measured"}
+            - Error rate change: ${evidence.errorRateChange ?: "not measured"}
 
-            ### Recent Events
-            ${evidence.events.joinToString("\n") { "- $it" }}
+            ### Traces
+            Slow endpoints: ${evidence.slowEndpoints.joinToString(", ")}
+            Failing dependencies: ${evidence.failingDependencies.joinToString(", ")}
 
-            ### APM Findings
-            ${evidence.apmFindings}
+            ### Events
+            ${evidence.eventsFound.joinToString("\n") { "- $it" }}
+            Recent deployments: ${evidence.recentDeployments}
 
-            ## Task
+            ## Your Task
             Based on this evidence:
-            1. Identify the most likely root cause candidates (up to ${properties.maxCandidates})
-            2. Rank them by likelihood (score 0.0 to 1.0)
-            3. Identify the primary suspect
-            4. Explain your reasoning
+            1. Identify up to ${properties.maxCandidates} root cause candidates
+            2. Score each by likelihood (0.0 to 1.0)
+            3. Identify the PRIMARY suspect with highest confidence
+            4. Explain your reasoning with specific evidence references
 
-            Focus on:
-            - New error patterns that appeared during the incident
-            - Correlation with recent deployments or changes
-            - Dependency failures indicated by error messages
-            - Resource exhaustion patterns
+            You can use Datadog tools for follow-up queries if needed.
+
+            Categories for candidates:
+            - DEPENDENCY: Downstream service issue
+            - INFRASTRUCTURE: Database, cache, connection pool
+            - DEPLOYMENT: Recent code or config change
+            - EXTERNAL: Third-party API or service
+            - RESOURCE: Memory, CPU, disk exhaustion
+            - CODE: Bug or logic error
         """.trimIndent()
         )
 
@@ -409,19 +353,17 @@ class IncidentInvestigatorAgent(
             ${analysis.candidates.take(5).joinToString("\n") { "- ${it.title} (score: ${it.score})" }}
 
             ## Evidence Available
-            - Log clusters: ${evidence.logClusters.size}
-            - Symptoms: ${evidence.symptoms.size}
-            - Events: ${evidence.events.size}
+            ${evidence.summary}
 
             ## Evaluation Criteria
             1. Does the analysis address the reported symptoms?
             2. Is the primary suspect well-supported by evidence?
             3. Are alternative hypotheses considered?
-            4. Is the confidence level appropriate?
+            4. Is the confidence level appropriate given the evidence?
             5. Would the recommendations lead to resolution?
 
-            Accept the analysis if it provides actionable insights.
-            Reject if it's too vague or unsupported by evidence.
+            Accept if it provides actionable insights with reasonable confidence.
+            Reject if too vague, unsupported by evidence, or missing obvious candidates.
         """.trimIndent()
         )
 
@@ -461,21 +403,18 @@ class IncidentInvestigatorAgent(
             Confidence: ${analysis.confidence}
 
             Top Candidates:
-            ${analysis.candidates.take(5).joinToString("\n") { "- ${it.title} (${it.score})" }}
+            ${analysis.candidates.take(5).joinToString("\n") { "- ${it.title}: ${it.evidence}" }}
 
             ## Evidence Summary
-            - ${evidence.logClusters.size} log patterns analyzed
-            - ${evidence.symptoms.size} symptoms detected
-            - ${evidence.events.size} related events
+            ${evidence.summary}
 
-            ## Task
-            Create a report with:
-            1. Executive summary (2-3 sentences)
-            2. Recommended immediate actions
-            3. Next investigation steps if needed
-            4. Severity assessment (CRITICAL, HIGH, MEDIUM, LOW, NORMAL)
+            ## Create Report With:
+            1. **summary**: Executive summary (2-3 sentences)
+            2. **recommendations**: Specific, actionable steps (immediate + long-term)
+            3. **nextSteps**: What to investigate if this doesn't resolve it
+            4. **severity**: CRITICAL, HIGH, MEDIUM, LOW, or NORMAL
 
-            Focus on actionable, specific recommendations.
+            Be specific. Reference actual error messages, metrics, and deployments found.
         """.trimIndent()
         )
 
@@ -484,7 +423,7 @@ class IncidentInvestigatorAgent(
      */
     @Condition(name = EVIDENCE_COLLECTED)
     fun hasEvidence(evidence: DatadogEvidence): Boolean =
-        evidence.logClusters.isNotEmpty() || evidence.symptoms.isNotEmpty()
+        evidence.logsSearched || evidence.metricsAnalyzed || evidence.tracesSearched
 
     /**
      * Condition: Root cause analysis is complete.
