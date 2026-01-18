@@ -1,0 +1,67 @@
+{
+  "data": [
+    {
+      "id": "span-001",
+      "attributes": {
+        "timestamp": "2026-01-15T12:01:00Z",
+        "trace_id": "trace-001",
+        "span_id": "span-001-a",
+        "service": "api",
+        "resource": "GET /users",
+        "name": "users.list",
+        "span.kind": "server",
+        "duration": 520000000,
+        "error": 0,
+        "http.status_code": 200
+      }
+    },
+    {
+      "id": "span-002",
+      "attributes": {
+        "timestamp": "2026-01-15T12:01:00Z",
+        "trace_id": "trace-001",
+        "span_id": "span-001-b",
+        "service": "api",
+        "resource": "SELECT * FROM users",
+        "name": "postgres.query",
+        "span.kind": "client",
+        "span.type": "db",
+        "peer.service": "postgres",
+        "duration": 480000000,
+        "error": 0
+      }
+    },
+    {
+      "id": "span-003",
+      "attributes": {
+        "timestamp": "2026-01-15T12:02:00Z",
+        "trace_id": "trace-002",
+        "span_id": "span-002-a",
+        "service": "api",
+        "resource": "GET /users",
+        "name": "users.list",
+        "span.kind": "server",
+        "duration": 5100000000,
+        "error": 1,
+        "http.status_code": 504
+      }
+    },
+    {
+      "id": "span-004",
+      "attributes": {
+        "timestamp": "2026-01-15T12:02:00Z",
+        "trace_id": "trace-002",
+        "span_id": "span-002-b",
+        "service": "api",
+        "resource": "SELECT * FROM users",
+        "name": "postgres.query",
+        "span.kind": "client",
+        "span.type": "db",
+        "peer.service": "postgres",
+        "duration": 5000000000,
+        "error": 1,
+        "error.message": "Connection timeout"
+      }
+    }
+  ]
+}

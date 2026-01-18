@@ -1,0 +1,41 @@
+spring:
+  application:
+    name: embabel-dice-rca
+  main:
+    banner-mode: off
+
+# Datadog Configuration
+datadog:
+  api-key: ${DD_API_KEY:}
+  app-key: ${DD_APP_KEY:}
+  site: ${DD_SITE:datadoghq.com}
+  timeout-seconds: 30
+  max-retries: 3
+
+# Embabel AI Configuration
+embabel:
+  api-key: ${EMBABEL_API_KEY:}
+  model: ${EMBABEL_MODEL:gpt-4}
+  temperature: 0.3
+
+# Dice Ingestion Configuration
+dice:
+  ingestion:
+    enabled: true
+    batch-size: 100
+    flush-interval: 5s
+  analysis:
+    auto-trigger: true
+    min-severity: WARNING
+
+# Logging
+logging:
+  level:
+    root: INFO
+    com.example.rca: DEBUG
+  pattern:
+    console: "%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+
+# Server (optional, for REST API)
+server:
+  port: 8080

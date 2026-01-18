@@ -1,0 +1,55 @@
+{
+  "data": [
+    {
+      "id": "log-001",
+      "attributes": {
+        "timestamp": "2026-01-15T12:01:00Z",
+        "service": "api",
+        "host": "api-host-1",
+        "status": "error",
+        "message": "TimeoutError: Connection pool exhausted after 5000ms",
+        "error.type": "TimeoutError",
+        "error.message": "Connection pool exhausted",
+        "ddtags": "env:prod,service:api"
+      }
+    },
+    {
+      "id": "log-002",
+      "attributes": {
+        "timestamp": "2026-01-15T12:02:00Z",
+        "service": "api",
+        "host": "api-host-2",
+        "status": "error",
+        "message": "TimeoutError: Connection pool exhausted after 5000ms",
+        "error.type": "TimeoutError",
+        "error.message": "Connection pool exhausted",
+        "ddtags": "env:prod,service:api"
+      }
+    },
+    {
+      "id": "log-003",
+      "attributes": {
+        "timestamp": "2026-01-15T12:03:00Z",
+        "service": "api",
+        "host": "api-host-1",
+        "status": "error",
+        "message": "SQLException: Unable to acquire connection from pool",
+        "error.type": "SQLException",
+        "error.message": "Unable to acquire connection",
+        "error.stack": "java.sql.SQLException: Unable to acquire connection\n\tat com.zaxxer.hikari.pool.HikariPool.getConnection(HikariPool.java:251)\n\tat com.example.api.Repository.query(Repository.java:45)",
+        "ddtags": "env:prod,service:api"
+      }
+    },
+    {
+      "id": "log-004",
+      "attributes": {
+        "timestamp": "2026-01-15T12:05:00Z",
+        "service": "api",
+        "host": "api-host-1",
+        "status": "warn",
+        "message": "Connection pool nearing capacity: 95/100",
+        "ddtags": "env:prod,service:api"
+      }
+    }
+  ]
+}

@@ -1,0 +1,31 @@
+spring:
+  application:
+    name: embabel-dice-rca-test
+  main:
+    banner-mode: off
+
+# Disable real Datadog in tests
+datadog:
+  api-key: ""
+  app-key: ""
+  site: datadoghq.com
+
+# Embabel configuration for tests
+embabel:
+  api-key: ""
+  model: gpt-4-mock
+  temperature: 0.0
+
+# Dice configuration for tests
+dice:
+  ingestion:
+    enabled: true
+    batch-size: 10
+  analysis:
+    auto-trigger: true
+
+# Logging - quieter for tests
+logging:
+  level:
+    root: WARN
+    com.example.rca: INFO
