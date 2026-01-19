@@ -68,6 +68,8 @@ datadog:
 
 # Dice Ingestion Configuration
 dice:
+  server:
+    url: ${DICE_SERVER_URL:http://localhost:8080}
   ingestion:
     enabled: true
     batch-size: 100

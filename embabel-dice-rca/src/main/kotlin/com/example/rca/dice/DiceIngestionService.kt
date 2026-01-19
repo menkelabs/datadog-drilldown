@@ -23,7 +23,8 @@ import java.util.concurrent.ConcurrentHashMap
 @Service
 class DiceIngestionService(
     private val eventPublisher: ApplicationEventPublisher,
-    private val rcaAgent: RcaAgent
+    private val rcaAgent: RcaAgent,
+    private val diceClient: DiceClient
 ) {
     private val logger = LoggerFactory.getLogger(javaClass)
     
@@ -58,9 +59,13 @@ class DiceIngestionService(
                 )
             )
 
-            // Store and start analysis
+            // Store locally
             activeIncidents[incidentId] = context
             
+            // PUSH TO REAL DICE SERVER
+            val ingestText = "Alert: ${trigger.id}\nService: ${trigger.service}\nMessage: ${trigger.message ?: "N/A"}"
+            diceClient.ingest(incidentId, "alert-${trigger.id}", ingestText)
+
             // Publish event for other listeners
             eventPublisher.publishEvent(AlertIngestedEvent(this, trigger, incidentId))
 

@@ -1,0 +1,5 @@
+{
+    "plantuml.render": "Local",
+    "plantuml.exportFormat": "png",
+    "plantuml.jar": "tools/plantuml/plantuml.jar"
+}

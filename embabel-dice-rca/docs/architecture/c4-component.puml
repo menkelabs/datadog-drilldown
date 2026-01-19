@@ -5,72 +5,46 @@ LAYOUT_WITH_LEGEND()
 
 title Component Diagram - Embabel Dice RCA Agent
 
-Container_Boundary(agent_container, "Incident Investigator Agent") {
-    Component(agent, "IncidentInvestigatorAgent", "@Agent", "Main Embabel agent with investigation workflow")
-    
-    Component(categorize, "categorizeIncident", "@Action", "Classifies incident type: LATENCY, ERROR_RATE, AVAILABILITY, RESOURCE_EXHAUSTION")
-    
-    Component(parse, "parseIncidentRequest", "@Action", "Extracts service, env, timeframe from user input")
-    
-    Component(collect, "collectDatadogEvidence", "@Action", "Orchestrates evidence collection using MCP tools")
-    
-    Component(analyze, "analyzeRootCause", "@Action", "Identifies root cause candidates with LLM reasoning")
-    
-    Component(critique, "critiqueAnalysis", "@Action", "Self-review for quality assurance")
-    
-    Component(report, "generateReport", "@Action @AchievesGoal", "Produces final recommendations")
-    
-    Component(conditions, "Conditions", "@Condition", "EVIDENCE_COLLECTED, ANALYSIS_COMPLETE, ANALYSIS_SATISFACTORY")
+Container_Boundary(agentBoundary, "RCA Agent") {
+    Component(agent, "RcaAgent", "Service", "Main orchestrator")
+    Component(categorize, "categorize", "Action", "Classify incident")
+    Component(parse, "parse", "Action", "Extract scope")
+    Component(collect, "collect", "Action", "Gather evidence")
+    Component(analyze, "analyze", "Action", "Identify causes")
+    Component(report, "report", "Action", "Generate output")
 }
 
-Container_Boundary(tools_container, "Datadog MCP Tools") {
-    Component(search_logs, "datadog_search_logs", "@LlmTool", "Search logs for error patterns")
-    Component(query_metrics, "datadog_query_metrics", "@LlmTool", "Query time series metrics")
-    Component(search_traces, "datadog_search_traces", "@LlmTool", "Search APM traces and dependencies")
-    Component(get_events, "datadog_get_events", "@LlmTool", "Get deployments, alerts, changes")
-    Component(get_monitor, "datadog_get_monitor", "@LlmTool", "Get monitor details")
-    Component(compare, "datadog_compare_periods", "@LlmTool", "Compare incident vs baseline")
+Container_Boundary(toolsBoundary, "MCP Tools") {
+    Component(logTool, "search_logs", "@LlmTool", "")
+    Component(metricTool, "query_metrics", "@LlmTool", "")
+    Component(traceTool, "search_traces", "@LlmTool", "")
 }
 
-Container_Boundary(analysis_container, "Analysis Engine") {
-    Component(log_analyzer, "LogAnalyzer", "Service", "Clusters logs by fingerprint, ranks by anomaly score")
-    Component(metric_analyzer, "MetricAnalyzer", "Service", "Analyzes metric symptoms and changes")
-    Component(apm_analyzer, "ApmAnalyzer", "Service", "Analyzes traces for endpoint/dependency issues")
-    Component(scoring, "ScoringEngine", "Service", "Scores candidates and generates recommendations")
+Container_Boundary(engineBoundary, "Engine") {
+    Component(logAna, "LogAnalyzer", "Service", "Clustering")
+    Component(metricAna, "MetricAnalyzer", "Service", "Anomalies")
+    Component(scoring, "ScoringEngine", "Service", "Ranking")
 }
 
-Container_Boundary(client_container, "Datadog Client") {
-    Component(dd_interface, "DatadogClient", "Interface", "Abstract API for Datadog operations")
-    Component(dd_http, "HttpDatadogClient", "Implementation", "Real HTTP client using WebClient")
-    Component(dd_mock, "MockDatadogClient", "Test Implementation", "Scenario-based mock for testing")
+Container_Boundary(clientBoundary, "Client") {
+    Component(ddInt, "DatadogClient", "Interface", "")
+    Component(ddReal, "RealHttpDatadogClient", "Implementation", "")
+    Component(ddMock, "MockDatadogClient", "Mock", "")
 }
 
-' Agent workflow
-Rel(agent, categorize, "1. Categorize")
-Rel(categorize, parse, "2. Parse")
-Rel(parse, collect, "3. Collect")
-Rel(collect, analyze, "4. Analyze")
-Rel(analyze, critique, "5. Critique")
-Rel(critique, report, "6. Report")
-Rel(conditions, agent, "Control flow")
+Container_Boundary(bridgeBoundary, "DICE Bridge") {
+    Component(diceCli, "DiceClient", "REST", "")
+    Component(diceSvc, "DiceIngestionService", "Service", "")
+}
 
-' Tool usage
-Rel(collect, search_logs, "LLM calls")
-Rel(collect, query_metrics, "LLM calls")
-Rel(collect, search_traces, "LLM calls")
-Rel(collect, get_events, "LLM calls")
-Rel(analyze, compare, "LLM calls")
+Rel(agent, collect, "Uses")
+Rel(collect, logTool, "Calls")
+Rel(logTool, ddInt, "Uses")
+Rel(ddInt, ddReal, "Impl")
+Rel(ddInt, ddMock, "Impl")
 
-' Tools to client
-Rel(search_logs, dd_interface, "Uses")
-Rel(query_metrics, dd_interface, "Uses")
-Rel(search_traces, dd_interface, "Uses")
-Rel(get_events, dd_interface, "Uses")
-Rel(get_monitor, dd_interface, "Uses")
-Rel(compare, dd_interface, "Uses")
-
-' Analysis engine
-Rel(search_logs, log_analyzer, "Uses for clustering")
-Rel(analyze, scoring, "Uses for ranking")
+Rel(agent, analyze, "Uses")
+Rel(analyze, scoring, "Calls")
+Rel(agent, diceCli, "Pushes")
 
 @enduml

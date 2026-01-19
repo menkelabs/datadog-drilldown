@@ -5,22 +5,30 @@ LAYOUT_WITH_LEGEND()
 
 title System Context Diagram - Embabel Dice RCA
 
-Person(sre, "SRE / On-Call Engineer", "Investigates production incidents and identifies root causes")
-Person(platform, "Platform Engineer", "Sets up alerting and monitoring integrations")
+Person(sre, "SRE / On-Call Engineer", "Investigates production incidents")
+Person(platform, "Platform Engineer", "Sets up monitoring integrations")
 
-System(rca_system, "Embabel Dice RCA", "AI-powered incident investigation system that analyzes Datadog telemetry to identify root causes and provide recommendations")
+System(rcaAgent, "Embabel RCA Agent", "AI-powered incident analysis system")
+System(rcaPython, "RCA Python Module", "Python implementation & utilities")
+System(diceServer, "DICE Server", "Manages incident memory & reasoning")
 
-System_Ext(datadog, "Datadog", "Observability platform providing logs, metrics, APM traces, and events")
-System_Ext(llm, "LLM Provider", "OpenAI / Anthropic / Ollama for AI reasoning")
-System_Ext(alerting, "Alerting System", "PagerDuty, OpsGenie, or Datadog Alerts")
-System_Ext(chat, "Chat Platform", "Slack, Teams, or CLI for incident communication")
+System_Ext(datadog, "Datadog", "Observability platform")
+System_Ext(llm, "LLM Provider", "AI reasoning (OpenAI/Anthropic)")
+System_Ext(alerting, "Alerting System", "PagerDuty / OpsGenie")
+System_Ext(chat, "Chat Platform", "Slack / Teams")
 
-Rel(sre, rca_system, "Describes incident, asks questions", "CLI / Chat")
-Rel(platform, rca_system, "Configures alert ingestion", "Webhooks / API")
+Rel(sre, rcaAgent, "Asks questions", "CLI/Chat")
+Rel(sre, rcaPython, "Uses tools", "CLI")
+Rel(platform, diceServer, "Configures alerts", "API")
 
-Rel(rca_system, datadog, "Queries logs, metrics, traces, events", "REST API")
-Rel(rca_system, llm, "Sends prompts, receives analysis", "API")
-Rel(alerting, rca_system, "Sends alert triggers", "Webhook / Dice Ingestion")
-Rel(rca_system, chat, "Sends investigation reports", "API")
+Rel(rcaAgent, datadog, "Queries telemetry", "REST")
+Rel(rcaPython, datadog, "Queries logs", "REST")
+Rel(rcaAgent, llm, "Sends prompts", "API")
+Rel(rcaAgent, diceServer, "Pushes analysis", "REST")
+Rel(rcaPython, diceServer, "Pushes analysis", "REST")
+
+Rel(alerting, diceServer, "Sends triggers", "Webhook")
+Rel(diceServer, rcaAgent, "Triggers analysis", "REST")
+Rel(rcaAgent, chat, "Sends reports", "API")
 
 @enduml

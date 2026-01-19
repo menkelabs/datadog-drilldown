@@ -4,44 +4,24 @@
 title Dice Alert Ingestion Sequence
 
 participant "Datadog\nMonitor" as monitor
-participant "Webhook\nEndpoint" as webhook
-participant "DiceIngestionService" as dice
-participant "IncidentStore" as store
-participant "RcaAgent" as rca
-participant "Event Bus" as events
+participant "DICE API\n(dice-server)" as dice_api
+participant "KnowledgeService" as knowledge
+participant "PropositionStore" as store
+participant "RCA Agent\n(embabel-dice-rca)" as rca
 
 == Alert Trigger ==
-monitor -> webhook: POST /dice/alerts\n{\n  alertType: MONITOR_ALERT,\n  monitorId: 12345,\n  service: "checkout",\n  severity: HIGH\n}
+monitor -> dice_api: POST /api/v1/contexts/default/ingest\n{\n  documentId: "alert-123",\n  text: "High error rate..."\n}
 
-webhook -> dice: ingestAlert(AlertTrigger)
-
-== Incident Creation ==
-dice -> dice: generateIncidentId()\n"INC-A1B2C3D4"
-
-dice -> dice: createWindowsFromAlert()\nincident: now-30m to now\nbaseline: now-60m to now-30m
-
-dice -> store: store(IncidentContext)
-store --> dice: OK
-
-== Event Publishing ==
-dice -> events: publish(AlertIngestedEvent)
-events --> dice: OK
+dice_api -> knowledge: processAndStore()
+knowledge -> knowledge: Extract Propositions (LLM)
+knowledge -> store: save(Propositions)
+store --> knowledge: OK
 
 == Analysis Trigger ==
-alt severity <= WARNING
-    dice -> rca: startAnalysis(IncidentContext)
-    
-    rca -> rca: analyzeLogs()
-    rca -> rca: analyzeApm()
-    rca -> rca: collectEvents()
-    rca -> rca: scoreAndRank()
-    
-    rca --> dice: Report
-end
-
-dice --> webhook: IngestionResult(\n  success: true,\n  incidentId: "INC-A1B2C3D4",\n  analysisTriggered: true\n)
-
-== Subsequent Events ==
-note over dice: Log streams and metric anomalies\ncan correlate with existing incidents\nby service/env/time window
-
+dice_api -> rca: POST /api/v1/analyze (Trigger)
+rca -> rca: Collect Datadog Evidence
+rca -> rca: Identify Root Causes
+rca -> dice_api: POST /api/v1/contexts/incident-1/ingest (Report)
+dice_api -> knowledge: processAndStore(Report)
+knowledge -> store: update memory
 @enduml

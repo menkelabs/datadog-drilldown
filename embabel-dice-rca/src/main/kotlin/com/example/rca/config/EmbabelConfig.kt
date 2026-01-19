@@ -3,6 +3,7 @@ package com.example.rca.config
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
+import org.springframework.web.client.RestTemplate
 
 /**
  * Configuration for Embabel AI agent framework.
@@ -15,6 +16,11 @@ class EmbabelConfig {
 
     @Value("\${embabel.temperature:0.3}")
     private var temperature: Double = 0.3
+
+    @Bean
+    fun restTemplate(): RestTemplate {
+        return RestTemplate()
+    }
 
     /**
      * Embabel client configuration.
