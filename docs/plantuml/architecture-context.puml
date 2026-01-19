@@ -1,0 +1,46 @@
+@startuml Context Diagram
+title System Context - Datadog RCA to Slack Integration with DICE
+
+skinparam backgroundColor white
+skinparam componentStyle rectangle
+skinparam defaultTextAlignment center
+skinparam shadowing false
+
+skinparam rectangle {
+    BackgroundColor<<external>> #FFECB3
+    BorderColor<<external>> #FFA000
+    BackgroundColor<<person>> #BBDEFB
+    BorderColor<<person>> #1976D2
+    BackgroundColor<<system>> #E1BEE7
+    BorderColor<<system>> #7B1FA2
+}
+
+' Users
+rectangle "DevOps Engineer\n//Monitors incidents//" <<person>> as devops
+rectangle "Site Reliability Engineer\n//Responds to incidents//" <<person>> as sre
+
+' External Systems
+rectangle "Datadog\n//Monitoring platform//" <<external>> as datadog
+rectangle "Slack\n//Team communication//" <<external>> as slack
+rectangle "DICE Service\n//PropositionPipeline\n& Memory API//" <<external>> as dice
+
+' dd-rca System
+package "dd-rca System" {
+    rectangle "Webhook Server\n//Receives alerts//" <<system>> as webhook_server
+    rectangle "Analysis Pipeline\n//Enriches & processes//" <<system>> as pipeline
+    rectangle "DICE Integration\n//Ingest & Query//" <<system>> as dice_integration
+}
+
+' Relationships
+devops --> datadog : Monitors
+sre --> slack : Receives alerts
+
+datadog --> webhook_server : HTTP POST
+webhook_server --> pipeline : Triggers
+pipeline --> datadog : REST API
+pipeline --> dice_integration : Uses
+dice_integration --> dice : POST /ingest
+dice_integration --> dice : GET /memory
+pipeline --> slack : Webhook API
+
+@enduml

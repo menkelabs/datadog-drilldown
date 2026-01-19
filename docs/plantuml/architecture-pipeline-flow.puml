@@ -1,0 +1,63 @@
+@startuml Pipeline Flow
+title Pipeline Flow - Datadog Webhook to DICE (Single Document Strategy)
+
+skinparam backgroundColor white
+skinparam componentStyle rectangle
+skinparam defaultTextAlignment center
+skinparam shadowing false
+
+skinparam rectangle {
+    BackgroundColor<<external>> #FFECB3
+    BorderColor<<external>> #FFA000
+    BackgroundColor<<step>> #E1BEE7
+    BorderColor<<step>> #7B1FA2
+    BackgroundColor<<dice>> #D4EEFF
+    BorderColor<<dice>> #63C0F5
+}
+
+' External Input
+rectangle "Datadog" <<external>> as datadog
+
+' Pipeline Steps
+rectangle "Webhook Handler\n//Flask//" <<step>> as webhook_handler
+rectangle "Webhook Parser\n//AlertSignal//" <<step>> as webhook_parser
+rectangle "Datadog Enricher\n//Report//" <<step>> as datadog_enricher
+
+' DICE Integration (Single Document Strategy)
+rectangle "Document Builder\n//documentId + text//" <<dice>> as doc_builder
+rectangle "DICE Ingest\n//POST /ingest//" <<dice>> as dice_ingest
+rectangle "DICE Memory\n//GET /memory//" <<dice>> as dice_memory
+
+' Output Steps
+rectangle "Message Composer\n//DICE insights//" <<step>> as message_composer
+rectangle "Slack Poster\n//Block Kit//" <<step>> as slack_poster
+
+' External Systems
+rectangle "DICE Service" <<external>> as dice
+rectangle "Slack" <<external>> as slack
+
+' Vertical Flow
+datadog --> webhook_handler : Webhook
+webhook_handler --> webhook_parser
+webhook_parser --> datadog_enricher
+datadog_enricher --> datadog : API calls
+
+datadog_enricher --> doc_builder : Report
+doc_builder --> dice_ingest : documentId, text
+dice_ingest --> dice : POST /ingest
+dice_ingest --> dice_memory : propositions
+dice_memory --> dice : GET /memory
+
+dice_memory --> message_composer : Propositions
+datadog_enricher --> message_composer : Evidence
+message_composer --> slack_poster
+slack_poster --> slack : Post
+
+note right of doc_builder
+  Single Document Strategy:
+  - One incident = one document
+  - DICE chunks internally
+  - Propositions traceable
+end note
+
+@enduml

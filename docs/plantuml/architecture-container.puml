@@ -1,0 +1,61 @@
+@startuml Container Diagram
+title Container Diagram - Datadog RCA to Slack Integration with DICE
+
+skinparam backgroundColor white
+skinparam componentStyle rectangle
+skinparam defaultTextAlignment center
+skinparam shadowing false
+
+skinparam rectangle {
+    BackgroundColor<<external>> #FFECB3
+    BorderColor<<external>> #FFA000
+    BackgroundColor<<person>> #BBDEFB
+    BorderColor<<person>> #1976D2
+    BackgroundColor<<container>> #E1BEE7
+    BorderColor<<container>> #7B1FA2
+    BackgroundColor<<dice>> #D4EEFF
+    BorderColor<<dice>> #63C0F5
+}
+
+' Users
+rectangle "DevOps Engineer" <<person>> as devops
+
+' External Systems
+rectangle "Datadog\n//Monitoring platform//" <<external>> as datadog
+rectangle "Slack\n//Team communication//" <<external>> as slack
+rectangle "DICE Service\n//Spring Boot\nPropositionPipeline//" <<external>> as dice
+
+' dd-rca Application
+package "dd-rca Application" {
+    rectangle "Webhook Server\n//Flask//\nHTTP server" <<container>> as webhook_server
+    rectangle "Webhook Pipeline\n//Python//\nOrchestrates flow" <<container>> as pipeline
+    rectangle "Datadog Client\n//Python//\nREST API client" <<container>> as datadog_client
+
+    ' DICE Integration components
+    rectangle "DICE Client\n//Python//\n/ingest & /memory" <<dice>> as dice_client
+    rectangle "DICE Utils\n//Python//\nreport_to_chunks" <<dice>> as dice_utils
+
+    rectangle "Slack Client\n//Python//\nWebhook client" <<container>> as slack_client
+}
+
+' Relationships
+devops --> datadog : Monitors systems
+datadog --> webhook_server : HTTP POST
+webhook_server --> pipeline : Triggers
+
+' Datadog enrichment
+pipeline --> datadog_client : Uses
+datadog_client --> datadog : REST API
+
+' DICE integration (following DICE API)
+pipeline --> dice_utils : Report to chunks
+dice_utils --> dice_client : chunks, sourceId
+dice_client --> dice : POST /ingest
+dice_client --> dice : GET /memory
+
+' Slack output
+pipeline --> slack_client : Uses
+slack_client --> slack : Webhook API
+slack --> devops : Delivers alerts
+
+@enduml
