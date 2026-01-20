@@ -1,5 +1,7 @@
 package com.example.rca.config
 
+import com.example.rca.datadog.DatadogClient
+import com.example.rca.datadog.dto.*
 import com.example.rca.datadog.impl.RealHttpDatadogClient
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty

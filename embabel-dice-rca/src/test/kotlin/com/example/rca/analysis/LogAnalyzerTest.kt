@@ -13,9 +13,9 @@ class LogAnalyzerTest {
     fun `test clustering logs by fingerprint`() {
         val now = Instant.now()
         val logs = listOf(
-            LogEntry(timestamp = now, message = "Error connecting to DB", attributes = mapOf("service" to "api")),
-            LogEntry(timestamp = now.plusSeconds(1), message = "Error connecting to DB", attributes = mapOf("service" to "api")),
-            LogEntry(timestamp = now.plusSeconds(2), message = "Out of memory", attributes = mapOf("service" to "api"))
+            LogEntry(id = "1", timestamp = now, message = "Error connecting to DB", attributes = mapOf("service" to "api")),
+            LogEntry(id = "2", timestamp = now.plusSeconds(1), message = "Error connecting to DB", attributes = mapOf("service" to "api")),
+            LogEntry(id = "3", timestamp = now.plusSeconds(2), message = "Out of memory", attributes = mapOf("service" to "api"))
         )
 
         val clusters = analyzer.clusterLogs(logs)
@@ -31,7 +31,7 @@ class LogAnalyzerTest {
     fun `test anomaly scoring`() {
         val now = Instant.now()
         val cluster = analyzer.clusterLogs(listOf(
-            LogEntry(timestamp = now, message = "New Error", attributes = emptyMap())
+            LogEntry(id = "1", timestamp = now, message = "New Error", attributes = emptyMap())
         )).first().copy(countBaseline = 0)
 
         // Score for new pattern should be high

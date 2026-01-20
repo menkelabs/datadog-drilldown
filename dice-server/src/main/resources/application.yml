@@ -7,8 +7,25 @@ spring:
   jackson:
     serialization:
       write_dates_as_timestamps: false
+  ai:
+    openai:
+      api-key: ${OPENAI_API_KEY:}
+
+# Embabel Agent Configuration
+embabel:
+  agent:
+    scan:
+      packages: com.embabel.dice
 
 logging:
   level:
     com.embabel.dice: DEBUG
+    com.embabel.agent: DEBUG
     org.springframework.web: INFO
+
+# Actuator for health checks
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

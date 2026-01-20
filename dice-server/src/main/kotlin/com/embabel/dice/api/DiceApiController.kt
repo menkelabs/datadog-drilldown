@@ -1,7 +1,6 @@
 package com.embabel.dice.api
 
 import com.embabel.dice.model.*
-import com.embabel.dice.pipeline.PropositionPipeline
 import com.embabel.dice.repository.PropositionRepository
 import org.springframework.web.bind.annotation.*
 

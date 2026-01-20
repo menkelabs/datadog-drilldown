@@ -71,10 +71,10 @@ if (ANALYSIS_SATISFACTORY?) then (yes)
   note right: Investigation complete
   stop
 else (no)
-  note right: ANALYSIS_UNSATISFACTORY
+  note right: ANALYSIS_UNSATISFACTORY\nRetry with more context
   :Retry analyzeRootCause;
   note right: canRerun = true
-  backward :analyzeRootCause;
+  #LightBlue:analyzeRootCause;
 endif
 
 @enduml

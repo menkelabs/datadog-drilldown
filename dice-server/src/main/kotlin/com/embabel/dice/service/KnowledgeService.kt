@@ -1,37 +1,56 @@
 package com.embabel.dice.service
 
-import com.embabel.agent.api.Embabel
-import com.embabel.agent.api.annotation.Agent
-import com.embabel.agent.api.annotation.Action
+import com.embabel.agent.api.common.OperationContext
+import com.embabel.agent.api.common.createObject
+import com.embabel.agent.api.models.OpenAiModels
 import com.embabel.dice.model.Proposition
+import com.fasterxml.jackson.annotation.JsonClassDescription
+import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
-import java.util.*
+
+/**
+ * Data class for extracted propositions from LLM.
+ */
+@JsonClassDescription("List of extracted propositions from text")
+data class ExtractedPropositions(
+    val propositions: List<String>
+)
 
 /**
  * Service to extract atomic semantic propositions from complex text.
- * Uses Embabel AI Agent for extraction.
+ * Uses Embabel AI to perform LLM-based extraction.
  */
-@Agent(name = "proposition-extractor")
-interface PropositionExtractor {
-
-    @Action("Extract a list of atomic, self-contained factual propositions from the given text. " +
-            "Each proposition should be a single sentence that captures a specific fact, " +
-            "event, or observation about the system state or incident.")
-    fun extractPropositions(text: String): List<String>
-}
-
 @Service
 class KnowledgeService(
-    private val extractor: PropositionExtractor,
-    private val repository: com.embabel.dice.repository.PropositionRepository
+    private val repository: com.embabel.dice.repository.PropositionRepository,
+    private val operationContext: OperationContext
 ) {
+    private val logger = LoggerFactory.getLogger(javaClass)
+    
     /**
      * Process text into atomic propositions and store them.
      */
     fun processAndStore(contextId: String, text: String, documentId: String? = null): List<Proposition> {
+        logger.info("Processing text for context $contextId, length=${text.length}")
+        
         val strings = try {
-            extractor.extractPropositions(text)
+            logger.debug("Calling LLM for proposition extraction...")
+            val extracted: ExtractedPropositions = operationContext.ai()
+                .withLlm(OpenAiModels.GPT_41_NANO)  // Use fast, cheap model
+                .createObject(
+                    """
+                    Extract a list of atomic, self-contained factual propositions from the given text.
+                    Each proposition should be a single sentence that captures a specific fact,
+                    event, or observation about the system state or incident.
+                    
+                    Text to analyze:
+                    $text
+                    """.trimIndent()
+                )
+            logger.info("LLM extracted ${extracted.propositions.size} propositions")
+            extracted.propositions
         } catch (e: Exception) {
+            logger.warn("LLM extraction failed, using fallback: ${e.message}")
             // Fallback to simple split if LLM fails
             text.split(Regex("[.\\n]")).map { it.trim() }.filter { it.length > 15 }
         }

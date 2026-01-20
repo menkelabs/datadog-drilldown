@@ -9,6 +9,7 @@ import com.example.rca.dice.model.AlertType
 import com.example.rca.mock.MockDatadogClient
 import com.example.rca.mock.scenario
 import org.junit.jupiter.api.Test
+import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.test.context.ActiveProfiles
@@ -25,10 +26,14 @@ import kotlin.test.assertNotNull
  * 3. Run RCA Analysis Agent using Mock Datadog data
  * 4. PUSH Analysis results to REAL dice-server module (via HTTP)
  * 5. QUERY REAL dice-server to verify it used Embabel logic to extract/reason
+ * 
+ * NOTE: This test requires a running dice-server instance on localhost:8080.
  */
 @SpringBootTest
 @ActiveProfiles("test")
 class SystemIntegrationTest {
+
+    private val logger = LoggerFactory.getLogger(javaClass)
 
     @Autowired
     lateinit var diceIngestionService: DiceIngestionService
@@ -44,6 +49,8 @@ class SystemIntegrationTest {
 
     @Test
     fun `test full integration from alert to dice query`() {
+        logger.info(">>> TEST START: Setting up scenario")
+        
         // 1. Setup mock Datadog scenario (Fake Datadog data via Interface)
         val incidentStart = Instant.now().minusSeconds(600)
         val testScenario = scenario("checkout-failure-scenario") {
@@ -51,8 +58,10 @@ class SystemIntegrationTest {
             incidentStart(incidentStart)
             // Add fake data points that the agent will analyze
         }
+        logger.info(">>> Scenario created, loading into datadogClient")
         datadogClient.loadScenario("checkout-failure-scenario", testScenario)
         datadogClient.setActiveScenario("checkout-failure-scenario")
+        logger.info(">>> Scenario loaded, creating trigger")
 
         // 2. Trigger an alert (Fake Event from Datadog)
         val trigger = AlertTrigger(
@@ -68,7 +77,9 @@ class SystemIntegrationTest {
 
         // 3. Process Alert -> Analysis (Mock DD) -> Dice Ingestion (Real DICE REST)
         // This validates that our ingestion logic correctly calls the dice-server
+        logger.info(">>> CALLING diceIngestionService.ingestAlert()")
         val result = diceIngestionService.ingestAlert(trigger)
+        logger.info(">>> ingestAlert returned: success=${result.success}, incidentId=${result.incidentId}")
         assertTrue(result.success, "Alert ingestion should succeed")
         val incidentId = result.incidentId!!
 

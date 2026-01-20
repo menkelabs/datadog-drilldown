@@ -6,7 +6,10 @@ import com.example.rca.analysis.ApmAnalyzer
 import com.example.rca.analysis.LogAnalyzer
 import com.example.rca.analysis.MetricAnalyzer
 import com.example.rca.analysis.ScoringEngine
+import com.example.rca.dice.DiceClient
 import com.example.rca.dice.DiceIngestionService
+import com.example.rca.dice.IngestResponse
+import com.example.rca.dice.DiceProposition
 import com.example.rca.dice.model.*
 import com.example.rca.domain.*
 import com.example.rca.fixtures.TestScenarios
@@ -53,7 +56,14 @@ class EndToEndRcaTest {
         )
 
         val eventPublisher = ApplicationEventPublisher { }
-        ingestionService = DiceIngestionService(eventPublisher, rcaAgent)
+        val mockDiceClient = object : DiceClient("http://localhost:8080") {
+            override fun ingest(contextId: String, documentId: String, text: String): IngestResponse {
+                return IngestResponse(documentId, 0, "SUCCESS", null)
+            }
+            override fun query(contextId: String, question: String): String = "Mock answer"
+            override fun listPropositions(contextId: String): List<DiceProposition> = emptyList()
+        }
+        ingestionService = DiceIngestionService(eventPublisher, rcaAgent, mockDiceClient)
     }
 
     @Test
