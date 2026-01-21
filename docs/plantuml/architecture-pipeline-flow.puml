@@ -19,7 +19,7 @@ skinparam rectangle {
 rectangle "Datadog" <<external>> as datadog
 
 ' Pipeline Steps
-rectangle "Webhook Handler\n//Flask//" <<step>> as webhook_handler
+rectangle "Webhook Handler\n//Spring Boot//" <<step>> as webhook_handler
 rectangle "Webhook Parser\n//AlertSignal//" <<step>> as webhook_parser
 rectangle "Datadog Enricher\n//Report//" <<step>> as datadog_enricher
 

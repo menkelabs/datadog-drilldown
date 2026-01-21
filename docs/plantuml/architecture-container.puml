@@ -25,37 +25,37 @@ rectangle "Datadog\n//Monitoring platform//" <<external>> as datadog
 rectangle "Slack\n//Team communication//" <<external>> as slack
 rectangle "DICE Service\n//Spring Boot\nPropositionPipeline//" <<external>> as dice
 
-' dd-rca Application
-package "dd-rca Application" {
-    rectangle "Webhook Server\n//Flask//\nHTTP server" <<container>> as webhook_server
-    rectangle "Webhook Pipeline\n//Python//\nOrchestrates flow" <<container>> as pipeline
-    rectangle "Datadog Client\n//Python//\nREST API client" <<container>> as datadog_client
+' Embabel RCA Application
+package "Embabel RCA Application" {
+    rectangle "RCA Agent\n//Kotlin//\nAI orchestrator" <<container>> as rca_agent
+    rectangle "Webhook Server\n//Spring Boot//\nHTTP server" <<container>> as webhook_server
+    rectangle "Datadog Client\n//Kotlin//\nREST API client" <<container>> as datadog_client
 
     ' DICE Integration components
-    rectangle "DICE Client\n//Python//\n/ingest & /memory" <<dice>> as dice_client
-    rectangle "DICE Utils\n//Python//\nreport_to_chunks" <<dice>> as dice_utils
+    rectangle "DICE Client\n//Kotlin//\n/ingest & /memory" <<dice>> as dice_client
+    rectangle "DICE Ingestion Service\n//Kotlin//\nreport processing" <<dice>> as dice_ingestion
 
-    rectangle "Slack Client\n//Python//\nWebhook client" <<container>> as slack_client
+    rectangle "Chat Client\n//Kotlin//\nSlack/Teams client" <<container>> as chat_client
 }
 
 ' Relationships
 devops --> datadog : Monitors systems
 datadog --> webhook_server : HTTP POST
-webhook_server --> pipeline : Triggers
+webhook_server --> rca_agent : Triggers
 
 ' Datadog enrichment
-pipeline --> datadog_client : Uses
+rca_agent --> datadog_client : Uses
 datadog_client --> datadog : REST API
 
 ' DICE integration (following DICE API)
-pipeline --> dice_utils : Report to chunks
-dice_utils --> dice_client : chunks, sourceId
+rca_agent --> dice_ingestion : Report processing
+dice_ingestion --> dice_client : chunks, sourceId
 dice_client --> dice : POST /ingest
 dice_client --> dice : GET /memory
 
-' Slack output
-pipeline --> slack_client : Uses
-slack_client --> slack : Webhook API
+' Chat output
+rca_agent --> chat_client : Uses
+chat_client --> slack : Webhook API
 slack --> devops : Delivers alerts
 
 @enduml
