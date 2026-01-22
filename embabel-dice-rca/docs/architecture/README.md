@@ -20,6 +20,7 @@ This directory contains C4 model PlantUML diagrams documenting the Embabel Dice 
 |---------|-------------|
 | [sequence-investigation.puml](sequence-investigation.puml) | Full incident investigation flow |
 | [sequence-dice-ingestion.puml](sequence-dice-ingestion.puml) | Alert ingestion via Dice |
+| [sequence-testing.puml](sequence-testing.puml) | DICE-based RCA testing flow with prior knowledge and YAML scenarios |
 
 ### Workflow Diagrams
 
@@ -131,3 +132,10 @@ Visit [PlantUML Web Server](http://www.plantuml.com/plantuml/uml/) and paste the
 - Event-driven architecture using Spring events
 - Correlates incoming alerts with existing incidents
 - Automatic analysis triggering based on severity
+
+### 5. DICE-Based Testing Framework
+- **DiceKnowledgeTestFramework**: Orchestrates prior knowledge loading, alert simulation, and conclusion verification
+- **Prior Knowledge Types**: SystemArchitecture, ServiceDependencies, FailurePatterns, PastIncidents, Runbooks, SLOs
+- **YAML Scenarios**: 20+ realistic incident scenarios (database-pool-exhaustion, downstream-failure, kubernetes-oom, etc.)
+- **MockDatadogClient**: Scenario-based mock that returns data from YAML files
+- **Verification**: Tests verify correct root cause identification with keyword matching and coverage thresholds

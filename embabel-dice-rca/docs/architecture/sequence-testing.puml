@@ -1,0 +1,135 @@
+@startuml Sequence_Testing
+!theme plain
+
+title DICE-Based RCA Testing Sequence
+
+participant "Test Case" as test
+participant "DiceKnowledgeTestFramework" as framework
+participant "YAML Scenarios" as yaml
+participant "MockDatadogClient" as mockDD
+participant "DiceClient" as dice
+participant "DICE Server" as diceServer
+participant "RCA Agent" as agent
+
+== Phase 1: Load Prior Knowledge ==
+test -> framework: loadPriorKnowledge(contextId, knowledge)
+note right of framework
+  Prior Knowledge includes:
+  - SystemArchitecture
+  - ServiceDependencies
+  - FailurePatterns
+  - PastIncidents
+  - Runbooks
+  - SLOs
+end note
+
+framework -> dice: ingest(contextId, "architecture", archText)
+dice -> diceServer: POST /api/v1/contexts/{id}/ingest
+diceServer --> dice: IngestResponse(propositionsExtracted)
+dice --> framework: OK
+
+framework -> dice: ingest(contextId, "pattern-*", patternText)
+dice -> diceServer: POST /api/v1/contexts/{id}/ingest
+diceServer --> dice: IngestResponse
+
+framework --> test: LoadResult(documentsLoaded, propositionsExtracted)
+
+== Phase 2: Setup Mock Datadog Data ==
+test -> yaml: Load scenario YAML
+yaml --> test: ScenarioConfig
+
+test -> mockDD: loadScenario("db-pool-exhaustion", scenario)
+note right of mockDD
+  YAML Scenario contains:
+  - Baseline metrics
+  - Incident metrics
+  - Baseline logs
+  - Incident logs (errors)
+  - APM spans
+  - Events (deploys)
+end note
+mockDD --> test: OK
+
+test -> mockDD: setActiveScenario("db-pool-exhaustion")
+
+== Phase 3: Simulate Alert ==
+test -> framework: simulateAlert(contextId, TestAlert)
+
+framework -> dice: ingest(contextId, "alert-*", alertText)
+dice -> diceServer: POST /api/v1/contexts/{id}/ingest
+diceServer --> dice: IngestResponse
+
+framework -> dice: query("What are likely causes?")
+dice -> diceServer: POST /api/v1/contexts/{id}/query
+diceServer --> dice: Initial assessment
+
+framework -> dice: searchPropositions("failure pattern")
+dice -> diceServer: POST /api/v1/contexts/{id}/memory/search
+diceServer --> dice: Relevant patterns[]
+
+== Phase 4: Gather Evidence ==
+framework -> mockDD: queryMetrics(query, start, end)
+note right of mockDD
+  Datadog API:
+  GET /api/v1/query?query={q}&from={epoch}&to={epoch}
+end note
+mockDD --> framework: MetricResponse (from YAML scenario)
+
+framework -> mockDD: searchLogs(query, start, end)
+note right of mockDD
+  Datadog API:
+  POST /api/v2/logs/events/search
+end note
+mockDD --> framework: List<LogEntry>
+
+framework -> mockDD: searchSpans(service, env)
+note right of mockDD
+  Datadog API:
+  POST /api/v2/spans/events/search
+end note
+mockDD --> framework: List<SpanEntry>
+
+framework -> mockDD: searchEvents(start, end, tags)
+note right of mockDD
+  Datadog API:
+  GET /api/v1/events
+end note
+mockDD --> framework: EventResponse
+
+== Phase 5: Ingest Evidence & Conclude ==
+framework -> dice: ingest(contextId, "evidence-*", evidenceText)
+dice -> diceServer: POST /api/v1/contexts/{id}/ingest
+
+framework -> dice: query("What is the root cause?")
+dice -> diceServer: POST /api/v1/contexts/{id}/query
+diceServer --> dice: Root cause analysis
+
+framework -> dice: query("What are recommendations?")
+dice -> diceServer: POST /api/v1/contexts/{id}/query
+diceServer --> dice: Recommendations
+
+framework -> dice: listPropositions(contextId, limit=100)
+dice -> diceServer: GET /api/v1/contexts/{id}/memory
+diceServer --> dice: List<DiceProposition>
+
+framework --> test: AnalysisResult(rootCauseAnalysis, recommendations, propositions)
+
+== Phase 6: Verify Conclusion ==
+test -> framework: verifyConclusion(result, ExpectedRootCause)
+note right of framework
+  ExpectedRootCause:
+  - keywords: ["connection pool", "exhausted"]
+  - component: "database"
+  - causeType: "pool exhaustion"
+  - requiredCoverage: 0.6
+end note
+
+framework --> test: VerificationResult(passed, keywordsFound, coverage)
+
+alt Verification Passed
+    test -> test: assertTrue(passed)
+else Verification Failed
+    test -> test: fail("Root cause not identified")
+end
+
+@enduml

@@ -8,6 +8,18 @@ title Deployment Diagram - Embabel Dice RCA
 Deployment_Node(dev_machine, "Developer Machine", "macOS / Linux") {
     Deployment_Node(jvm, "JVM 21", "OpenJDK") {
         Container(rca_app, "embabel-dice-rca", "Spring Boot 3.2", "Incident investigation agent")
+        Container(dice_server, "dice-server", "Spring Boot 3.2", "DICE API server")
+    }
+}
+
+Deployment_Node(test_env, "Test Environment", "JUnit 5 / Maven") {
+    Deployment_Node(test_jvm, "Test JVM", "OpenJDK 21") {
+        Container(test_framework, "DiceKnowledgeTestFramework", "Kotlin", "Test orchestration")
+        Container(mock_datadog, "MockDatadogClient", "Kotlin", "Scenario-based mock")
+    }
+    Deployment_Node(test_resources, "Test Resources", "src/test/resources") {
+        ContainerDb(yaml_scenarios, "YAML Scenarios", "20+ files", "database-pool-exhaustion\ndownstream-failure\nkubernetes-oom\ndns-resolution-failure\n...")
+        ContainerDb(test_fixtures, "Test Fixtures", "JSON/Kotlin", "Sample logs, metrics,\nspans, events")
     }
 }
 
@@ -36,14 +48,22 @@ Deployment_Node(local_llm, "Local LLM (Optional)", "Developer Machine") {
     System_Ext(ollama, "Ollama", "Local model serving")
 }
 
+' Production relationships
 Rel(rca_app, dd_api, "HTTPS", "REST API")
 Rel(rca_app, llm_api, "HTTPS", "API")
 Rel(rca_app, ollama, "HTTP", "localhost:11434")
+Rel(rca_app, dice_server, "HTTP", "localhost:8080")
 
 Rel(rca_prod, dd_api, "HTTPS", "REST API")
 Rel(rca_prod, llm_api, "HTTPS", "API")
 Rel(rca_prod, creds, "mTLS", "Secrets injection")
 
 Rel(dd_api, dd_data, "Internal")
+
+' Test environment relationships
+Rel(test_framework, dice_server, "HTTP", "localhost:8080")
+Rel(test_framework, mock_datadog, "In-process", "")
+Rel(mock_datadog, yaml_scenarios, "Loads", "")
+Rel(test_framework, test_fixtures, "Uses", "")
 
 @enduml
