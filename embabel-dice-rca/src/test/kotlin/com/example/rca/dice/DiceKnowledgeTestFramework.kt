@@ -1,10 +1,12 @@
 package com.example.rca.dice
 
 import com.example.rca.datadog.DatadogClient
+import com.example.rca.datadog.dto.*
 import com.example.rca.dice.model.*
 import com.example.rca.domain.*
 import com.example.rca.mock.MockDatadogClient
 import org.slf4j.LoggerFactory
+import java.time.Duration
 import java.time.Instant
 import java.util.*
 
@@ -15,6 +17,10 @@ import java.util.*
  * 1. Ingests PRIOR KNOWLEDGE into DICE (system architecture, dependencies, past incidents)
  * 2. Simulates a NEW ALERT/INCIDENT
  * 3. Verifies the RCA agent reaches the CORRECT CONCLUSION using DICE + Datadog data
+ * 
+ * Uses:
+ * - DICE API: POST /api/v1/contexts/{contextId}/ingest, /query, /memory/search
+ * - Datadog API: GET /api/v1/query, POST /api/v2/logs/events/search, POST /api/v2/spans/events/search
  */
 class DiceKnowledgeTestFramework(
     private val diceClient: DiceClient,
@@ -25,6 +31,8 @@ class DiceKnowledgeTestFramework(
     /**
      * Load prior knowledge into DICE for a test context.
      * This represents what the system "knows" before the incident.
+     * 
+     * Uses DICE API: POST /api/v1/contexts/{contextId}/ingest
      */
     fun loadPriorKnowledge(contextId: String, knowledge: PriorKnowledge): LoadResult {
         logger.info("Loading prior knowledge into DICE context: $contextId")
@@ -34,37 +42,43 @@ class DiceKnowledgeTestFramework(
         // 1. Ingest system architecture
         knowledge.architecture?.let { arch ->
             val archText = formatArchitecture(arch)
-            results.add(diceClient.ingest(contextId, "architecture", archText))
+            val metadata = mapOf("type" to "architecture", "name" to arch.name)
+            results.add(diceClient.ingest(contextId, "architecture", archText, metadata))
         }
         
         // 2. Ingest service dependencies
         knowledge.dependencies.forEach { dep ->
             val depText = formatDependency(dep)
-            results.add(diceClient.ingest(contextId, "dep-${dep.from}-${dep.to}", depText))
+            val metadata = mapOf("type" to "dependency", "from" to dep.from, "to" to dep.to)
+            results.add(diceClient.ingest(contextId, "dep-${dep.from}-${dep.to}", depText, metadata))
         }
         
         // 3. Ingest known failure patterns
         knowledge.failurePatterns.forEach { pattern ->
             val patternText = formatFailurePattern(pattern)
-            results.add(diceClient.ingest(contextId, "pattern-${pattern.id}", patternText))
+            val metadata = mapOf("type" to "failure_pattern", "patternId" to pattern.id)
+            results.add(diceClient.ingest(contextId, "pattern-${pattern.id}", patternText, metadata))
         }
         
         // 4. Ingest past incidents (historical knowledge)
         knowledge.pastIncidents.forEach { incident ->
             val incidentText = formatPastIncident(incident)
-            results.add(diceClient.ingest(contextId, "incident-${incident.id}", incidentText))
+            val metadata = mapOf("type" to "past_incident", "incidentId" to incident.id)
+            results.add(diceClient.ingest(contextId, "incident-${incident.id}", incidentText, metadata))
         }
         
         // 5. Ingest runbooks
         knowledge.runbooks.forEach { runbook ->
             val runbookText = formatRunbook(runbook)
-            results.add(diceClient.ingest(contextId, "runbook-${runbook.id}", runbookText))
+            val metadata = mapOf("type" to "runbook", "runbookId" to runbook.id)
+            results.add(diceClient.ingest(contextId, "runbook-${runbook.id}", runbookText, metadata))
         }
         
         // 6. Ingest SLOs and thresholds
         knowledge.slos.forEach { slo ->
             val sloText = formatSlo(slo)
-            results.add(diceClient.ingest(contextId, "slo-${slo.id}", sloText))
+            val metadata = mapOf("type" to "slo", "sloId" to slo.id, "service" to slo.service)
+            results.add(diceClient.ingest(contextId, "slo-${slo.id}", sloText, metadata))
         }
         
         val successCount = results.count { it.status == "SUCCESS" }
@@ -82,6 +96,13 @@ class DiceKnowledgeTestFramework(
 
     /**
      * Simulate a new alert and run RCA analysis.
+     * 
+     * This method:
+     * 1. Ingests alert into DICE (POST /api/v1/contexts/{contextId}/ingest)
+     * 2. Queries DICE for initial assessment (POST /api/v1/contexts/{contextId}/query)
+     * 3. Gathers evidence from Datadog APIs
+     * 4. Ingests evidence into DICE
+     * 5. Queries DICE for root cause conclusion
      */
     fun simulateAlert(
         contextId: String,
@@ -95,45 +116,69 @@ class DiceKnowledgeTestFramework(
             datadogClient.setActiveScenario(mockScenario)
         }
         
-        // Ingest the alert into DICE
+        // Step 1: Ingest the alert into DICE
+        // DICE API: POST /api/v1/contexts/{contextId}/ingest
         val alertText = formatTestAlert(alert)
-        diceClient.ingest(contextId, "alert-${alert.id}", alertText)
+        val alertMetadata = mapOf(
+            "type" to "alert",
+            "alertId" to alert.id,
+            "service" to (alert.service ?: "unknown"),
+            "severity" to alert.severity
+        )
+        diceClient.ingest(contextId, "alert-${alert.id}", alertText, alertMetadata)
         
-        // Query DICE for initial assessment
+        // Step 2: Query DICE for initial assessment based on prior knowledge
+        // DICE API: POST /api/v1/contexts/{contextId}/query
         val initialAssessment = diceClient.query(
             contextId,
             "Given this alert and our system knowledge, what are the most likely causes? " +
             "What should we investigate first?"
         )
         
-        // Simulate gathering evidence from Datadog
+        // Step 3: Search DICE for relevant failure patterns
+        // DICE API: POST /api/v1/contexts/{contextId}/memory/search
+        val relevantPatterns = diceClient.searchPropositions(
+            contextId,
+            query = "failure pattern ${alert.service ?: ""} ${alert.message}",
+            topK = 5
+        )
+        logger.info("Found ${relevantPatterns.size} relevant patterns in DICE")
+        
+        // Step 4: Gather evidence from Datadog APIs
         val evidence = gatherEvidence(alert, contextId)
         
-        // Ingest evidence into DICE
+        // Step 5: Ingest evidence into DICE
         evidence.forEach { (key, text) ->
-            diceClient.ingest(contextId, "evidence-$key", text)
+            val evidenceMetadata = mapOf("type" to "evidence", "source" to "datadog")
+            diceClient.ingest(contextId, "evidence-$key", text, evidenceMetadata)
         }
         
-        // Query DICE for root cause conclusion
+        // Step 6: Query DICE for root cause conclusion
+        // DICE API: POST /api/v1/contexts/{contextId}/query
         val rootCauseAnalysis = diceClient.query(
             contextId,
             "Based on all the evidence gathered, what is the root cause of this incident? " +
             "Explain your reasoning step by step."
         )
         
-        // Get recommendations
+        // Step 7: Get recommendations
         val recommendations = diceClient.query(
             contextId,
             "What are the recommended actions to resolve this incident and prevent recurrence?"
         )
         
+        // Step 8: List all propositions for verification
+        // DICE API: GET /api/v1/contexts/{contextId}/memory
+        val allPropositions = diceClient.listPropositions(contextId, limit = 100)
+        
         return AnalysisResult(
             alertId = alert.id,
             initialAssessment = initialAssessment,
+            relevantPatterns = relevantPatterns,
             evidenceGathered = evidence.keys.toList(),
             rootCauseAnalysis = rootCauseAnalysis,
             recommendations = recommendations,
-            propositions = diceClient.listPropositions(contextId)
+            propositions = allPropositions
         )
     }
 
@@ -181,51 +226,108 @@ class DiceKnowledgeTestFramework(
         )
     }
 
-    // Evidence gathering from Datadog
+    /**
+     * Gather evidence from Datadog APIs.
+     * 
+     * Datadog APIs used:
+     * - GET /api/v1/query - Query timeseries metrics
+     * - POST /api/v2/logs/events/search - Search logs
+     * - POST /api/v2/spans/events/search - Search APM spans
+     * - GET /api/v1/events - Query events
+     */
     private fun gatherEvidence(alert: TestAlert, contextId: String): Map<String, String> {
         val evidence = mutableMapOf<String, String>()
         val now = Instant.now()
-        val start = now.minusSeconds(3600) // 1 hour back
+        val start = now.minus(Duration.ofHours(1))
         
-        // Gather metrics
+        // 1. Query metrics using Datadog Metrics API
+        // Datadog API: GET /api/v1/query?from={epoch}&to={epoch}&query={query}
         alert.metricsToQuery.forEach { query ->
             try {
-                val response = datadogClient.queryMetrics(query, start, now)
-                evidence["metric-${query.hashCode()}"] = formatMetricEvidence(query, response)
+                logger.info("Querying Datadog metrics: $query")
+                val response: MetricResponse = datadogClient.queryMetrics(query, start, now)
+                evidence["metric-${query.hashCode().toString(16)}"] = formatMetricEvidence(query, response)
             } catch (e: Exception) {
-                logger.warn("Failed to query metric: $query", e)
+                logger.warn("Failed to query Datadog metric: $query - ${e.message}")
             }
         }
         
-        // Gather logs
+        // 2. Search logs using Datadog Logs API
+        // Datadog API: POST /api/v2/logs/events/search
+        // Body: { filter: { from, to, query }, sort, page: { limit, cursor } }
         alert.logQueries.forEach { query ->
             try {
-                val logs = datadogClient.searchLogs(query, start, now)
-                evidence["logs-${query.hashCode()}"] = formatLogEvidence(query, logs)
+                logger.info("Searching Datadog logs: $query")
+                val logs: List<LogEntry> = datadogClient.searchLogs(
+                    query = query,
+                    start = start,
+                    end = now,
+                    limit = 100,
+                    maxPages = 1
+                )
+                evidence["logs-${query.hashCode().toString(16)}"] = formatLogEvidence(query, logs)
             } catch (e: Exception) {
-                logger.warn("Failed to query logs: $query", e)
+                logger.warn("Failed to search Datadog logs: $query - ${e.message}")
             }
         }
         
-        // Gather traces
+        // 3. Search APM traces/spans using Datadog APM API
+        // Datadog API: POST /api/v2/spans/events/search
+        // Body: { filter: { from, to, query }, sort, page: { limit, cursor } }
         alert.traceQueries.forEach { (service, env) ->
             try {
-                val spans = datadogClient.searchSpans("service:$service env:$env", start, now)
+                val spanQuery = "service:$service env:$env"
+                logger.info("Searching Datadog spans: $spanQuery")
+                val spans: List<SpanEntry> = datadogClient.searchSpans(
+                    query = spanQuery,
+                    start = start,
+                    end = now,
+                    limit = 100,
+                    maxPages = 1
+                )
                 evidence["traces-$service"] = formatTraceEvidence(service, spans)
             } catch (e: Exception) {
-                logger.warn("Failed to query traces: $service", e)
+                logger.warn("Failed to search Datadog spans: $service - ${e.message}")
             }
         }
         
-        // Gather events
+        // 4. Query events using Datadog Events API
+        // Datadog API: GET /api/v1/events?start={epoch}&end={epoch}&tags={tags}
         try {
-            val events = datadogClient.searchEvents(start, now, alert.service?.let { "service:$it" })
+            val tags = alert.service?.let { "service:$it" }
+            logger.info("Querying Datadog events: tags=$tags")
+            val events: EventResponse = datadogClient.searchEvents(start, now, tags)
             evidence["events"] = formatEventEvidence(events)
         } catch (e: Exception) {
-            logger.warn("Failed to query events", e)
+            logger.warn("Failed to query Datadog events: ${e.message}")
         }
         
+        // 5. Get monitor details if monitorId provided
+        // Datadog API: GET /api/v1/monitor/{monitorId}
+        alert.monitorId?.let { monitorId ->
+            try {
+                logger.info("Getting Datadog monitor: $monitorId")
+                val monitor: MonitorResponse = datadogClient.getMonitor(monitorId)
+                evidence["monitor-$monitorId"] = formatMonitorEvidence(monitor)
+            } catch (e: Exception) {
+                logger.warn("Failed to get Datadog monitor: $monitorId - ${e.message}")
+            }
+        }
+        
+        logger.info("Gathered ${evidence.size} pieces of evidence from Datadog")
         return evidence
+    }
+    
+    private fun formatMonitorEvidence(monitor: MonitorResponse): String = buildString {
+        appendLine("MONITOR DETAILS")
+        appendLine("ID: ${monitor.id}")
+        appendLine("Name: ${monitor.name}")
+        appendLine("Type: ${monitor.type}")
+        appendLine("Query: ${monitor.query}")
+        appendLine("Tags: ${monitor.tags.joinToString(", ")}")
+        monitor.state?.let { 
+            appendLine("State: ${it.overallState}")
+        }
     }
 
     // Formatting helpers
@@ -465,13 +567,15 @@ data class TestAlert(
     val timestamp: Instant = Instant.now(),
     val severity: String = "WARNING",
     val service: String? = null,
+    val env: String? = "prod",
     val message: String,
+    val monitorId: Long? = null,
     val metricQuery: String? = null,
     val currentValue: Double? = null,
     val threshold: Double? = null,
     val metricsToQuery: List<String> = emptyList(),
     val logQueries: List<String> = emptyList(),
-    val traceQueries: List<Pair<String, String>> = emptyList() // service, env
+    val traceQueries: List<Pair<String, String>> = emptyList() // (service, env)
 )
 
 data class ExpectedRootCause(
@@ -491,6 +595,7 @@ data class LoadResult(
 data class AnalysisResult(
     val alertId: String,
     val initialAssessment: String,
+    val relevantPatterns: List<DiceProposition> = emptyList(),
     val evidenceGathered: List<String>,
     val rootCauseAnalysis: String,
     val recommendations: String,
