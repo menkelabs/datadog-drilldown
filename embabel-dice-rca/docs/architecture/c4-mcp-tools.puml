@@ -20,13 +20,19 @@ Container_Boundary(tools, "DatadogTools (@Component)") {
     Component(compare_periods, "datadog_compare_periods", "@LlmTool", "Compare incident vs baseline\n\nParams:\n- query: Metric query\n- incidentMinutes: Incident window\n- baselineMinutes: Baseline window\n\nReturns: ComparisonResult with\npercentChange, assessment")
 }
 
-Container_Boundary(client, "DatadogClient") {
-    Component(dd_client, "DatadogClient", "Interface", "HTTP client for Datadog API")
+Container_Boundary(client, "DatadogClient (Interface)") {
+    Component(dd_interface, "DatadogClient", "Interface", "Abstract HTTP client for Datadog API\n\nMethods:\n- getMonitor(id)\n- queryMetrics(query, start, end)\n- searchLogs(query, start, end)\n- searchSpans(query, start, end)\n- searchEvents(start, end, tags)")
+    Component(dd_real, "RealHttpDatadogClient", "Implementation", "Production HTTP client\nUses DD_API_KEY, DD_APP_KEY")
+    Component(dd_mock, "MockDatadogClient", "Mock", "Scenario-based testing\nLoads from YAML files")
 }
 
 Container_Boundary(analysis, "Analysis Helpers") {
     Component(log_analyzer, "LogAnalyzer", "Service", "Fingerprinting and clustering")
     Component(stats, "SpanStats", "Utility", "P50/P95/P99 calculations")
+}
+
+Container_Boundary(testData, "Test Scenarios (YAML)") {
+    Component(scenarios, "Scenario Files", "YAML", "20+ incident scenarios:\n- database-pool-exhaustion\n- downstream-service-failure\n- kubernetes-oom\n- dns-resolution-failure\n- thread-pool-exhaustion\n- gc-storm\n...")
 }
 
 System_Ext(datadog_api, "Datadog REST API", "v1 and v2 endpoints")
@@ -39,16 +45,20 @@ Rel(llm, get_events, "calls")
 Rel(llm, get_monitor, "calls")
 Rel(llm, compare_periods, "calls")
 
-Rel(search_logs, dd_client, "uses")
-Rel(query_metrics, dd_client, "uses")
-Rel(search_traces, dd_client, "uses")
-Rel(get_events, dd_client, "uses")
-Rel(get_monitor, dd_client, "uses")
-Rel(compare_periods, dd_client, "uses")
+Rel(search_logs, dd_interface, "uses")
+Rel(query_metrics, dd_interface, "uses")
+Rel(search_traces, dd_interface, "uses")
+Rel(get_events, dd_interface, "uses")
+Rel(get_monitor, dd_interface, "uses")
+Rel(compare_periods, dd_interface, "uses")
+
+Rel(dd_interface, dd_real, "implements (prod)")
+Rel(dd_interface, dd_mock, "implements (test)")
 
 Rel(search_logs, log_analyzer, "uses")
 Rel(search_traces, stats, "uses")
 
-Rel(dd_client, datadog_api, "HTTP", "REST")
+Rel(dd_real, datadog_api, "HTTP", "REST")
+Rel(dd_mock, scenarios, "loads", "")
 
 @enduml

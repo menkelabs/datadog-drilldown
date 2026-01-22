@@ -22,6 +22,13 @@ System_Boundary(diceServerSys, "DICE Server System") {
     ContainerDb(storage, "Fact Store", "H2 / Memory", "Incident propositions")
 }
 
+System_Boundary(testInfraSys, "Test Infrastructure") {
+    Container(testFramework, "DiceKnowledgeTestFramework", "Kotlin", "Loads prior knowledge\nSimulates alerts\nVerifies conclusions")
+    Container(mockDatadog, "MockDatadogClient", "Kotlin", "Scenario-based Datadog mock")
+    ContainerDb(yamlScenarios, "YAML Scenarios", "YAML Files", "20+ incident scenarios\n(db-pool, dns, k8s, etc.)")
+    Container(priorKnowledge, "Prior Knowledge", "Kotlin Models", "Architecture, Dependencies\nFailure Patterns, Runbooks")
+}
+
 System_Ext(datadog, "Datadog", "Observability Platform")
 System_Ext(llm, "LLM", "AI Provider")
 System_Ext(alerting, "Alerts", "PagerDuty / DD")
@@ -43,5 +50,12 @@ Rel(knowledge, llm, "Extracts", "API")
 Rel(knowledge, storage, "Saves facts", "")
 Rel(reasoning, storage, "Reads facts", "")
 Rel(reasoning, llm, "Reasons", "API")
+
+' Test infrastructure relationships
+Rel(testFramework, diceApi, "Ingests prior knowledge", "REST")
+Rel(testFramework, mockDatadog, "Configures", "")
+Rel(mockDatadog, yamlScenarios, "Loads from", "")
+Rel(testFramework, priorKnowledge, "Uses", "")
+Rel(testFramework, agent, "Triggers analysis", "")
 
 @enduml

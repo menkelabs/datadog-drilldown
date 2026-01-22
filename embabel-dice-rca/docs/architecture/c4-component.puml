@@ -26,15 +26,22 @@ Container_Boundary(engineBoundary, "Engine") {
     Component(scoring, "ScoringEngine", "Service", "Ranking")
 }
 
-Container_Boundary(clientBoundary, "Client") {
-    Component(ddInt, "DatadogClient", "Interface", "")
-    Component(ddReal, "RealHttpDatadogClient", "Implementation", "")
-    Component(ddMock, "MockDatadogClient", "Mock", "")
+Container_Boundary(clientBoundary, "Datadog Client") {
+    Component(ddInt, "DatadogClient", "Interface", "Abstract API")
+    Component(ddReal, "RealHttpDatadogClient", "Implementation", "Production HTTP client")
+    Component(ddMock, "MockDatadogClient", "Mock", "Scenario-based testing")
 }
 
 Container_Boundary(bridgeBoundary, "DICE Bridge") {
-    Component(diceCli, "DiceClient", "REST", "")
-    Component(diceSvc, "DiceIngestionService", "Service", "")
+    Component(diceCli, "DiceClient", "REST", "HTTP client for DICE API")
+    Component(diceSvc, "DiceIngestionService", "Service", "Alert & evidence ingestion")
+}
+
+Container_Boundary(testBoundary, "Test Framework") {
+    Component(testFw, "DiceKnowledgeTestFramework", "Test Framework", "Loads prior knowledge\nSimulates alerts\nVerifies conclusions")
+    Component(priorKnowledge, "PriorKnowledge", "Model", "Architecture, Dependencies\nFailure Patterns, Past Incidents\nRunbooks, SLOs")
+    Component(scenarioLoader, "ScenarioLoader", "YAML Parser", "Loads test scenarios\nfrom YAML files")
+    Component(testScenarios, "TestScenarios", "Fixtures", "Pre-built Datadog scenarios\nfor integration testing")
 }
 
 Rel(agent, collect, "Uses")
@@ -46,5 +53,11 @@ Rel(ddInt, ddMock, "Impl")
 Rel(agent, analyze, "Uses")
 Rel(analyze, scoring, "Calls")
 Rel(agent, diceCli, "Pushes")
+
+Rel(testFw, diceCli, "Ingests prior knowledge")
+Rel(testFw, ddMock, "Configures scenarios")
+Rel(scenarioLoader, ddMock, "Loads YAML data")
+Rel(testFw, priorKnowledge, "Uses")
+Rel(testScenarios, ddMock, "Provides data")
 
 @enduml
