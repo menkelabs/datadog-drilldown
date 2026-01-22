@@ -1,0 +1,294 @@
+# Scenario: Rate Limiting / API Throttling
+#
+# Root Cause: Aggressive rate limiting triggered by a misbehaving client,
+# affecting legitimate traffic due to shared rate limit buckets.
+
+name: rate-limiting
+description: >
+  Rate limiting triggered by traffic spike from a single client.
+  Shared rate limit bucket causes legitimate requests to be rejected.
+
+timing:
+  incident_start: "2026-01-25T10:00:00Z"
+  baseline_window_minutes: 30
+  incident_window_minutes: 30
+
+scope:
+  service: api-gateway
+  environment: prod
+  affected_endpoints:
+    - /api/v1/products
+    - /api/v1/search
+    - /api/v1/inventory
+
+monitor:
+  id: 22222
+  name: "API Rate Limit Rejections"
+  type: metric alert
+  query: "sum(last_5m):sum:http.requests.rejected{reason:rate_limit,env:prod}.as_count() > 1000"
+  message: "High rate limit rejection rate. Check for abusive clients."
+  tags:
+    - env:prod
+    - team:platform
+
+metrics:
+  # Rate limiting metrics - KEY INDICATORS
+  - name: http.requests.rejected
+    type: count
+    tags: ["reason:rate_limit", "env:prod"]
+    baseline:
+      value: 10
+    incident:
+      pattern: spike
+      value: 5000
+      noise: 500
+
+  - name: rate_limit.bucket.usage
+    type: gauge
+    unit: percent
+    tags: ["service:api-gateway", "bucket:global"]
+    baseline:
+      value: 30
+      noise: 10
+    incident:
+      value: 100  # Saturated
+      noise: 0
+
+  - name: rate_limit.requests.allowed
+    type: count
+    tags: ["service:api-gateway", "env:prod"]
+    baseline:
+      value: 10000
+    incident:
+      value: 5000  # Half rejected
+
+  - name: rate_limit.requests.denied
+    type: count
+    tags: ["service:api-gateway", "env:prod"]
+    baseline:
+      value: 10
+    incident:
+      value: 5000
+
+  # Client breakdown
+  - name: http.requests
+    type: count
+    tags: ["service:api-gateway", "client:scraper-bot-123"]
+    baseline:
+      value: 100
+    incident:
+      value: 20000  # Abusive client
+
+  - name: http.requests
+    type: count
+    tags: ["service:api-gateway", "client:mobile-app"]
+    baseline:
+      value: 5000
+    incident:
+      value: 5000  # Normal traffic, but getting rejected
+
+  # HTTP status codes
+  - name: http.responses
+    type: count
+    tags: ["service:api-gateway", "status_code:429"]
+    baseline:
+      value: 10
+    incident:
+      value: 5000
+
+  - name: http.responses
+    type: count
+    tags: ["service:api-gateway", "status_code:200"]
+    baseline:
+      value: 9900
+    incident:
+      value: 4900
+
+  # Downstream impact (services not getting traffic)
+  - name: trace.product-service.request.hits
+    type: count
+    tags: ["service:product-service", "env:prod"]
+    baseline:
+      value: 5000
+    incident:
+      value: 2500  # 50% reduction
+
+  # Error rate from client perspective
+  - name: app.client.error_rate
+    type: gauge
+    unit: percent
+    tags: ["client:mobile-app", "error_code:429"]
+    baseline:
+      value: 0.1
+    incident:
+      value: 50  # 50% of requests failing
+
+logs:
+  baseline:
+    - timestamp_offset_minutes: -20
+      service: api-gateway
+      status: info
+      message: "Request processed: GET /api/v1/products"
+
+  incident:
+    # Rate limit warnings
+    - timestamp_offset_minutes: 1
+      service: api-gateway
+      status: warn
+      message: "Rate limit bucket at 80% capacity"
+      attributes:
+        rate_limit.bucket: global
+        rate_limit.current: 8000
+        rate_limit.max: 10000
+
+    - timestamp_offset_minutes: 2
+      service: api-gateway
+      status: warn
+      message: "Rate limit bucket exhausted"
+      attributes:
+        rate_limit.bucket: global
+        rate_limit.rejection_count: 500
+
+    - timestamp_offset_minutes: 2
+      service: api-gateway
+      status: warn
+      message: "High request rate from client: scraper-bot-123"
+      attributes:
+        client.id: scraper-bot-123
+        client.requests_per_minute: 5000
+        client.ip: "203.0.113.42"
+
+    - timestamp_offset_minutes: 3
+      service: api-gateway
+      status: info
+      message: "Rate limit rejection: 429 Too Many Requests"
+      attributes:
+        http.status_code: 429
+        client.id: mobile-app-user-12345
+        rate_limit.retry_after: 60
+
+    - timestamp_offset_minutes: 5
+      service: api-gateway
+      status: error
+      message: "Legitimate traffic affected by rate limiting"
+      attributes:
+        affected_clients: 1500
+        rejection_rate_percent: 50
+
+    - timestamp_offset_minutes: 5
+      service: api-gateway
+      status: warn
+      message: "Client scraper-bot-123 consuming 80% of rate limit quota"
+      attributes:
+        client.id: scraper-bot-123
+        client.quota_usage_percent: 80
+
+    # Mobile app errors
+    - timestamp_offset_minutes: 10
+      service: mobile-backend
+      status: error
+      message: "Elevated 429 errors from API gateway"
+      attributes:
+        error_code: 429
+        error_count: 2500
+        time_window_minutes: 5
+
+    - timestamp_offset_minutes: 15
+      service: api-gateway
+      status: info
+      message: "Applied emergency per-client rate limit to scraper-bot-123"
+      attributes:
+        client.id: scraper-bot-123
+        rate_limit.new_limit: 100
+        rate_limit.previous_limit: null
+
+spans:
+  baseline:
+    - trace_id: trace-api-base-001
+      spans:
+        - span_id: span-api-001
+          service: api-gateway
+          resource: "GET /api/v1/products"
+          span_kind: server
+          duration_ns: 100000000
+          is_error: false
+          http.status_code: 200
+
+  incident:
+    # Rejected request
+    - trace_id: trace-api-inc-001
+      spans:
+        - span_id: span-api-inc-001
+          service: api-gateway
+          resource: "GET /api/v1/products"
+          span_kind: server
+          duration_ns: 5000000  # 5ms - fast rejection
+          is_error: true
+          http.status_code: 429
+          rate_limit.rejected: true
+          rate_limit.reason: "bucket_exhausted"
+
+    # Successful request (got through)
+    - trace_id: trace-api-inc-002
+      spans:
+        - span_id: span-api-inc-002
+          service: api-gateway
+          resource: "GET /api/v1/products"
+          span_kind: server
+          duration_ns: 100000000
+          is_error: false
+          http.status_code: 200
+          rate_limit.bucket_remaining: 50
+
+events:
+  - id: 22001
+    title: "New API client registered: scraper-bot-123"
+    text: "New API key issued for data aggregation service"
+    date_happened_offset_minutes: -1440  # 1 day ago
+    source: api-management
+    alert_type: info
+    tags:
+      - client:scraper-bot-123
+      - client_type:data_aggregator
+
+  - id: 22002
+    title: "Alert: Rate limit rejections > 1000"
+    text: "High rate of 429 responses"
+    date_happened_offset_minutes: 2
+    source: datadog
+    alert_type: warning
+    tags:
+      - service:api-gateway
+
+  - id: 22003
+    title: "Alert: Mobile app error rate elevated"
+    text: "Mobile app users experiencing increased failures"
+    date_happened_offset_minutes: 10
+    source: datadog
+    alert_type: error
+    tags:
+      - client:mobile-app
+
+  - id: 22004
+    title: "Manual intervention: Per-client rate limit applied"
+    text: "Applied 100 req/min limit to scraper-bot-123"
+    date_happened_offset_minutes: 15
+    source: operations
+    alert_type: info
+    tags:
+      - client:scraper-bot-123
+      - action:rate_limit
+
+expected_rca:
+  root_cause: "Abusive client (scraper-bot-123) consuming shared rate limit quota"
+  contributing_factors:
+    - "No per-client rate limiting configured"
+    - "Global rate limit bucket shared across all clients"
+    - "New client not assigned appropriate quota tier"
+    - "Bot made 20,000 requests in 5 minutes"
+  recommended_actions:
+    - "Implement per-client rate limiting"
+    - "Add tiered rate limits based on client type"
+    - "Set up automatic abuse detection"
+    - "Add bot detection and CAPTCHA challenges"
+    - "Implement fair queuing for rate-limited requests"

@@ -1,0 +1,285 @@
+# Scenario: SSL Certificate Expiry
+#
+# Root Cause: SSL certificate expired, causing TLS handshake failures
+# for service-to-service communication.
+
+name: ssl-certificate-expiry
+description: >
+  SSL certificate expired on internal service, causing TLS handshake failures.
+  Services unable to establish secure connections.
+
+timing:
+  incident_start: "2026-01-24T00:00:00Z"  # Midnight expiry
+  baseline_window_minutes: 30
+  incident_window_minutes: 30
+
+scope:
+  service: auth-service
+  environment: prod
+  affected_clients:
+    - api-gateway
+    - user-service
+    - order-service
+
+monitor:
+  id: 11111
+  name: "TLS Handshake Errors"
+  type: metric alert
+  query: "sum(last_5m):sum:tls.handshake.errors{service:auth-service,env:prod}.as_count() > 10"
+  message: "TLS handshake errors detected. Check certificates."
+  tags:
+    - service:auth-service
+    - env:prod
+
+metrics:
+  # TLS metrics
+  - name: tls.handshake.errors
+    type: count
+    tags: ["service:auth-service", "env:prod"]
+    baseline:
+      value: 0
+    incident:
+      pattern: step_change
+      value: 1000  # All handshakes failing
+      noise: 50
+
+  - name: tls.handshake.success
+    type: count
+    tags: ["service:auth-service", "env:prod"]
+    baseline:
+      value: 500
+    incident:
+      value: 0  # None succeeding
+
+  - name: tls.certificate.days_until_expiry
+    type: gauge
+    tags: ["service:auth-service", "env:prod"]
+    baseline:
+      value: 30
+    incident:
+      value: 0  # Expired
+
+  # Service error metrics
+  - name: trace.api-gateway.request.errors
+    type: count
+    tags: ["service:api-gateway", "env:prod", "error.type:SSLException"]
+    baseline:
+      value: 0
+    incident:
+      value: 500
+      noise: 100
+
+  - name: trace.user-service.request.errors
+    type: count
+    tags: ["service:user-service", "env:prod", "error.type:SSLHandshakeException"]
+    baseline:
+      value: 0
+    incident:
+      value: 300
+      noise: 50
+
+  # Connection metrics
+  - name: http.client.connection.errors
+    type: count
+    tags: ["client:api-gateway", "server:auth-service"]
+    baseline:
+      value: 2
+    incident:
+      value: 500
+      noise: 100
+
+  # Auth service appears healthy to itself
+  - name: trace.auth-service.request.hits
+    type: count
+    tags: ["service:auth-service", "env:prod"]
+    baseline:
+      value: 500
+    incident:
+      value: 50  # Only local/non-TLS traffic
+
+  # Health check may still work (depending on setup)
+  - name: app.health.status
+    type: gauge
+    tags: ["service:auth-service", "env:prod"]
+    baseline:
+      value: 1  # Healthy
+    incident:
+      value: 1  # Still healthy (internal check)
+
+logs:
+  baseline:
+    - timestamp_offset_minutes: -20
+      service: api-gateway
+      status: info
+      message: "Authentication successful for user-12345"
+
+  incident:
+    # Certificate expiry
+    - timestamp_offset_minutes: 0
+      service: cert-manager
+      status: error
+      message: "Certificate auth-service-tls has expired"
+      attributes:
+        certificate.name: auth-service-tls
+        certificate.expiry: "2026-01-24T00:00:00Z"
+        certificate.namespace: production
+
+    # Client-side errors
+    - timestamp_offset_minutes: 1
+      service: api-gateway
+      status: error
+      message: "SSLHandshakeException: PKIX path validation failed: certificate has expired"
+      attributes:
+        error.type: SSLHandshakeException
+        error.message: "certificate has expired"
+        tls.peer: "auth-service.production.svc.cluster.local"
+        tls.peer_certificate_expiry: "2026-01-24T00:00:00Z"
+        error.stack: |
+          javax.net.ssl.SSLHandshakeException: PKIX path validation failed
+            at sun.security.ssl.Alert.createSSLException(Alert.java:131)
+            at sun.security.ssl.SSLSocketImpl.recvAlert(SSLSocketImpl.java:2084)
+            Caused by: java.security.cert.CertPathValidatorException: validity check failed
+              at sun.security.provider.certpath.PKIXMasterCertPathValidator.validate(PKIXMasterCertPathValidator.java:135)
+
+    - timestamp_offset_minutes: 2
+      service: user-service
+      status: error
+      message: "Failed to authenticate user: TLS handshake failed with auth-service"
+      attributes:
+        error.type: AuthenticationException
+        error.cause: "SSLHandshakeException"
+
+    - timestamp_offset_minutes: 3
+      service: order-service
+      status: error
+      message: "Unable to validate token: auth-service connection failed"
+      attributes:
+        error.type: TokenValidationException
+        downstream.service: auth-service
+        error.cause: "certificate has expired"
+
+    - timestamp_offset_minutes: 5
+      service: api-gateway
+      status: warn
+      message: "Circuit breaker OPEN for auth-service"
+      attributes:
+        circuit.name: auth-service
+        circuit.state: OPEN
+        circuit.failure_rate: 100
+
+    - timestamp_offset_minutes: 5
+      service: api-gateway
+      status: error
+      message: "Authentication bypass: cannot reach auth-service"
+      attributes:
+        auth.fallback: "reject_all"
+        error.reason: "auth-service unavailable"
+
+    # All requests now failing auth
+    - timestamp_offset_minutes: 10
+      service: api-gateway
+      status: error
+      message: "Unauthorized: authentication service unavailable"
+      attributes:
+        http.status_code: 503
+        error.reason: "auth-service SSL handshake failure"
+
+spans:
+  baseline:
+    - trace_id: trace-auth-base-001
+      spans:
+        - span_id: span-gateway-001
+          service: api-gateway
+          resource: "POST /orders"
+          span_kind: server
+          duration_ns: 150000000
+          is_error: false
+
+        - span_id: span-auth-001
+          service: api-gateway
+          resource: "auth-service/validate"
+          span_kind: client
+          duration_ns: 30000000
+          peer.service: auth-service
+          tls.version: "TLSv1.3"
+
+  incident:
+    - trace_id: trace-auth-inc-001
+      spans:
+        - span_id: span-gateway-inc-001
+          service: api-gateway
+          resource: "POST /orders"
+          span_kind: server
+          duration_ns: 100000000
+          is_error: true
+          http.status_code: 503
+
+        - span_id: span-auth-inc-001
+          service: api-gateway
+          resource: "auth-service/validate"
+          span_kind: client
+          duration_ns: 50000000
+          is_error: true
+          peer.service: auth-service
+          error.type: SSLHandshakeException
+          error.message: "certificate has expired"
+
+events:
+  - id: 11001
+    title: "Certificate: auth-service-tls expiring soon"
+    text: "Certificate expires in 7 days. Renewal pending."
+    date_happened_offset_minutes: -10080  # 7 days ago
+    source: cert-manager
+    alert_type: warning
+    tags:
+      - certificate:auth-service-tls
+
+  - id: 11002
+    title: "Certificate: auth-service-tls expiring in 24h"
+    text: "URGENT: Certificate expires tomorrow"
+    date_happened_offset_minutes: -1440  # 1 day ago
+    source: cert-manager
+    alert_type: error
+    tags:
+      - certificate:auth-service-tls
+
+  - id: 11003
+    title: "Certificate: auth-service-tls EXPIRED"
+    text: "Certificate has expired at 2026-01-24T00:00:00Z"
+    date_happened_offset_minutes: 0
+    source: cert-manager
+    alert_type: error
+    tags:
+      - certificate:auth-service-tls
+      - certificate.status:expired
+
+  - id: 11004
+    title: "Alert: TLS handshake errors > 10"
+    text: "High TLS error rate for auth-service"
+    date_happened_offset_minutes: 1
+    source: datadog
+    alert_type: error
+    tags:
+      - service:auth-service
+
+  - id: 11005
+    title: "Alert: API Gateway 503 errors spike"
+    text: "API Gateway returning 503 due to auth failures"
+    date_happened_offset_minutes: 5
+    source: datadog
+    alert_type: error
+    tags:
+      - service:api-gateway
+
+expected_rca:
+  root_cause: "auth-service TLS certificate expired"
+  contributing_factors:
+    - "Certificate renewal automation failed"
+    - "Warning alerts at 7 days and 24 hours were not actioned"
+    - "No fallback authentication mechanism"
+  recommended_actions:
+    - "Immediately renew/replace auth-service certificate"
+    - "Fix cert-manager auto-renewal configuration"
+    - "Implement certificate expiry monitoring with lower thresholds"
+    - "Add runbook for certificate emergencies"
+    - "Consider mTLS with automatic rotation"

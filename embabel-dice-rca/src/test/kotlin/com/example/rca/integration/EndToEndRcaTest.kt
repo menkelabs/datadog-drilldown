@@ -57,11 +57,11 @@ class EndToEndRcaTest {
 
         val eventPublisher = ApplicationEventPublisher { }
         val mockDiceClient = object : DiceClient("http://localhost:8080") {
-            override fun ingest(contextId: String, documentId: String, text: String): IngestResponse {
+            override fun ingest(contextId: String, documentId: String, text: String, metadata: Map<String, Any>): IngestResponse {
                 return IngestResponse(documentId, 0, "SUCCESS", null)
             }
             override fun query(contextId: String, question: String): String = "Mock answer"
-            override fun listPropositions(contextId: String): List<DiceProposition> = emptyList()
+            override fun listPropositions(contextId: String, status: String?, limit: Int): List<DiceProposition> = emptyList()
         }
         ingestionService = DiceIngestionService(eventPublisher, rcaAgent, mockDiceClient)
     }

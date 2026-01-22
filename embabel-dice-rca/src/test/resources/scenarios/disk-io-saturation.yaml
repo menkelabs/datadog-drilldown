@@ -1,0 +1,366 @@
+# Scenario: Disk I/O Saturation
+#
+# Root Cause: Heavy write workload saturating disk I/O, causing
+# slow database queries and log write delays.
+
+name: disk-io-saturation
+description: >
+  Disk I/O saturation on database node causing query slowdowns.
+  A backup job running during peak hours consumed I/O bandwidth.
+
+timing:
+  incident_start: "2026-01-26T14:00:00Z"
+  baseline_window_minutes: 30
+  incident_window_minutes: 30
+
+scope:
+  service: order-service
+  environment: prod
+  affected_host: db-primary-1
+  database: orders-db
+
+monitor:
+  id: 33333
+  name: "Disk I/O Utilization"
+  type: metric alert
+  query: "avg(last_5m):avg:system.io.util{host:db-primary-1} > 90"
+  message: "Disk I/O utilization above 90%. Check for heavy I/O workloads."
+  tags:
+    - host:db-primary-1
+    - env:prod
+
+metrics:
+  # Disk I/O metrics - KEY INDICATORS
+  - name: system.io.util
+    type: gauge
+    unit: percent
+    tags: ["host:db-primary-1", "device:nvme0n1"]
+    baseline:
+      value: 30
+      noise: 10
+    incident:
+      value: 99  # Saturated
+      noise: 1
+
+  - name: system.io.await
+    type: gauge
+    unit: millisecond
+    tags: ["host:db-primary-1", "device:nvme0n1"]
+    baseline:
+      value: 2
+      noise: 1
+    incident:
+      value: 200  # 100x slower
+      noise: 50
+
+  - name: system.io.r_await
+    type: gauge
+    unit: millisecond
+    tags: ["host:db-primary-1", "device:nvme0n1"]
+    baseline:
+      value: 1
+    incident:
+      value: 150
+
+  - name: system.io.w_await
+    type: gauge
+    unit: millisecond
+    tags: ["host:db-primary-1", "device:nvme0n1"]
+    baseline:
+      value: 2
+    incident:
+      value: 300
+
+  - name: system.io.rkb_s
+    type: gauge
+    unit: kilobyte
+    tags: ["host:db-primary-1", "device:nvme0n1"]
+    baseline:
+      value: 50000  # 50MB/s read
+    incident:
+      value: 200000  # 200MB/s - backup reading
+
+  - name: system.io.wkb_s
+    type: gauge
+    unit: kilobyte
+    tags: ["host:db-primary-1", "device:nvme0n1"]
+    baseline:
+      value: 30000  # 30MB/s write
+    incident:
+      value: 150000  # 150MB/s - backup + normal
+
+  # Queue depth
+  - name: system.io.queue_depth
+    type: gauge
+    tags: ["host:db-primary-1", "device:nvme0n1"]
+    baseline:
+      value: 4
+    incident:
+      value: 128  # Max queue depth
+
+  # Database metrics
+  - name: postgresql.queries.time
+    type: gauge
+    unit: millisecond
+    tags: ["db:orders-db", "env:prod"]
+    baseline:
+      value: 5
+      noise: 2
+    incident:
+      value: 500  # 100x slower
+      noise: 200
+
+  - name: postgresql.bgwriter.buffers_checkpoint
+    type: count
+    tags: ["db:orders-db"]
+    baseline:
+      value: 100
+    incident:
+      value: 5000  # Aggressive checkpointing
+
+  - name: postgresql.checkpoints.write_time
+    type: gauge
+    unit: millisecond
+    tags: ["db:orders-db"]
+    baseline:
+      value: 1000
+    incident:
+      value: 30000  # 30 second checkpoints
+
+  # Service impact
+  - name: trace.order-service.request.duration
+    type: gauge
+    unit: millisecond
+    tags: ["service:order-service", "env:prod"]
+    baseline:
+      value: 50
+      noise: 20
+    incident:
+      value: 2000
+      noise: 500
+
+  - name: trace.order-service.request.errors
+    type: count
+    tags: ["service:order-service", "env:prod"]
+    baseline:
+      value: 2
+    incident:
+      value: 100  # Timeouts
+
+  # Backup process metrics
+  - name: backup.bytes_written
+    type: count
+    tags: ["host:db-primary-1", "backup:pg_basebackup"]
+    baseline:
+      value: 0
+    incident:
+      value: 500000000000  # 500GB backup
+
+  - name: backup.duration
+    type: gauge
+    unit: second
+    tags: ["host:db-primary-1", "backup:pg_basebackup"]
+    baseline:
+      value: 0
+    incident:
+      pattern: linear_increase
+      value: 3600  # 1 hour and counting
+
+logs:
+  baseline:
+    - timestamp_offset_minutes: -20
+      service: order-service
+      status: info
+      message: "Order created: order-12345 in 45ms"
+
+  incident:
+    # Backup start
+    - timestamp_offset_minutes: 0
+      service: postgresql
+      host: db-primary-1
+      status: info
+      message: "Starting pg_basebackup to backup-server"
+      attributes:
+        backup.type: pg_basebackup
+        backup.target: backup-server
+        backup.checkpoint: fast
+
+    - timestamp_offset_minutes: 1
+      service: postgresql
+      status: warn
+      message: "Checkpoint starting: backup in progress"
+      attributes:
+        checkpoint.cause: "backup"
+        checkpoint.estimated_time_ms: 30000
+
+    # I/O pressure detection
+    - timestamp_offset_minutes: 5
+      service: system
+      host: db-primary-1
+      status: warn
+      message: "Disk I/O utilization above 90%"
+      attributes:
+        io.util_percent: 95
+        io.device: nvme0n1
+        io.await_ms: 150
+
+    - timestamp_offset_minutes: 5
+      service: postgresql
+      status: warn
+      message: "Slow query detected: 500ms for SELECT"
+      attributes:
+        query: "SELECT * FROM orders WHERE customer_id = $1"
+        duration_ms: 500
+        expected_ms: 5
+
+    # Service impact
+    - timestamp_offset_minutes: 10
+      service: order-service
+      status: error
+      message: "Database query timeout: 5000ms exceeded"
+      attributes:
+        error.type: QueryTimeoutException
+        query: "INSERT INTO orders ..."
+        timeout_ms: 5000
+
+    - timestamp_offset_minutes: 10
+      service: order-service
+      status: warn
+      message: "Connection pool exhausted waiting for slow queries"
+      attributes:
+        pool.active: 100
+        pool.waiting: 50
+
+    # I/O scheduler issues
+    - timestamp_offset_minutes: 15
+      service: system
+      host: db-primary-1
+      status: error
+      message: "I/O scheduler queue depth at maximum: 128"
+      attributes:
+        io.queue_depth: 128
+        io.queue_depth_max: 128
+
+    # Backup progress
+    - timestamp_offset_minutes: 20
+      service: postgresql
+      status: info
+      message: "pg_basebackup progress: 250GB / 500GB"
+      attributes:
+        backup.progress_percent: 50
+        backup.bytes_copied: 250000000000
+
+    - timestamp_offset_minutes: 25
+      service: postgresql
+      status: warn
+      message: "WAL segment delayed due to I/O pressure"
+      attributes:
+        wal.segment: "000000010000001200000045"
+        wal.delay_ms: 5000
+
+spans:
+  baseline:
+    - trace_id: trace-order-base-001
+      spans:
+        - span_id: span-order-001
+          service: order-service
+          resource: "POST /orders"
+          span_kind: server
+          duration_ns: 50000000
+          is_error: false
+
+        - span_id: span-db-001
+          service: order-service
+          resource: "INSERT INTO orders"
+          span_kind: client
+          duration_ns: 10000000
+          peer.service: postgres
+
+  incident:
+    - trace_id: trace-order-inc-001
+      spans:
+        - span_id: span-order-inc-001
+          service: order-service
+          resource: "POST /orders"
+          span_kind: server
+          duration_ns: 2000000000  # 2 seconds
+          is_error: false
+
+        - span_id: span-db-inc-001
+          service: order-service
+          resource: "INSERT INTO orders"
+          span_kind: client
+          duration_ns: 1500000000  # 1.5 seconds
+          peer.service: postgres
+
+    # Timed out request
+    - trace_id: trace-order-inc-002
+      spans:
+        - span_id: span-order-inc-002
+          service: order-service
+          resource: "POST /orders"
+          span_kind: server
+          duration_ns: 5000000000
+          is_error: true
+          http.status_code: 504
+
+        - span_id: span-db-inc-002
+          service: order-service
+          resource: "INSERT INTO orders"
+          span_kind: client
+          duration_ns: 5000000000
+          is_error: true
+          peer.service: postgres
+          error.type: QueryTimeoutException
+
+events:
+  - id: 33001
+    title: "Scheduled: Database backup"
+    text: "Daily pg_basebackup scheduled for 14:00"
+    date_happened_offset_minutes: 0
+    source: cron
+    alert_type: info
+    tags:
+      - backup:pg_basebackup
+      - host:db-primary-1
+
+  - id: 33002
+    title: "Alert: Disk I/O > 90%"
+    text: "db-primary-1 disk I/O utilization critical"
+    date_happened_offset_minutes: 5
+    source: datadog
+    alert_type: warning
+    tags:
+      - host:db-primary-1
+
+  - id: 33003
+    title: "Alert: Database query latency elevated"
+    text: "orders-db query time above threshold"
+    date_happened_offset_minutes: 5
+    source: datadog
+    alert_type: warning
+    tags:
+      - db:orders-db
+
+  - id: 33004
+    title: "Alert: order-service P99 latency > 2s"
+    text: "Order service latency degraded"
+    date_happened_offset_minutes: 10
+    source: datadog
+    alert_type: error
+    tags:
+      - service:order-service
+
+expected_rca:
+  root_cause: "Database backup running during peak hours saturating disk I/O"
+  contributing_factors:
+    - "pg_basebackup scheduled at 14:00 (peak traffic)"
+    - "Backup reads 500GB at full disk speed"
+    - "No I/O rate limiting for backup process"
+    - "Single NVMe disk handling both backup and production"
+  recommended_actions:
+    - "Reschedule backup to off-peak hours (02:00-04:00)"
+    - "Implement I/O rate limiting with ionice"
+    - "Consider taking backups from replica instead"
+    - "Add I/O bandwidth reservation for production queries"
+    - "Use incremental backup (pgBackRest) to reduce I/O"

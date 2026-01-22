@@ -1,0 +1,384 @@
+# Scenario: Kubernetes Node Memory Pressure
+#
+# Root Cause: A node experiences memory pressure, causing pod evictions
+# and scheduling failures across multiple services.
+
+name: kubernetes-node-pressure
+description: >
+  Kubernetes node enters MemoryPressure state, triggering pod evictions.
+  Multiple services affected as pods are evicted and cannot be rescheduled.
+
+timing:
+  incident_start: "2026-01-19T15:00:00Z"
+  baseline_window_minutes: 30
+  incident_window_minutes: 30
+
+scope:
+  environment: prod
+  namespace: production
+  affected_node: worker-node-3
+  affected_services:
+    - api-service
+    - order-service
+    - inventory-service
+
+monitor:
+  id: 56789
+  name: "Kubernetes Node Status"
+  type: metric alert
+  query: "max(last_5m):max:kubernetes_state.node.status{condition:MemoryPressure,status:true} > 0"
+  message: "Kubernetes node in MemoryPressure condition. Pods may be evicted."
+  tags:
+    - env:prod
+    - team:platform
+
+metrics:
+  # Node metrics
+  - name: kubernetes_state.node.status
+    type: gauge
+    tags: ["node:worker-node-3", "condition:Ready"]
+    baseline:
+      value: 1  # Ready
+    incident:
+      value: 0  # NotReady
+
+  - name: kubernetes_state.node.status
+    type: gauge
+    tags: ["node:worker-node-3", "condition:MemoryPressure"]
+    baseline:
+      value: 0  # No pressure
+    incident:
+      value: 1  # Under pressure
+
+  - name: system.mem.pct_usable
+    type: gauge
+    unit: percent
+    tags: ["host:worker-node-3"]
+    baseline:
+      value: 35
+      noise: 5
+    incident:
+      pattern: gradual_decrease
+      value: 3  # Only 3% free
+      noise: 1
+
+  - name: system.mem.used
+    type: gauge
+    unit: byte
+    tags: ["host:worker-node-3"]
+    baseline:
+      value: 10000000000  # 10GB of 16GB
+    incident:
+      value: 15500000000  # 15.5GB - critical
+
+  # Pod metrics - evictions
+  - name: kubernetes.pods.running
+    type: gauge
+    tags: ["kube_namespace:production", "node:worker-node-3"]
+    baseline:
+      value: 25
+    incident:
+      pattern: step_decrease
+      value: 8  # Many evicted
+
+  - name: kubernetes_state.pod.status_phase
+    type: gauge
+    tags: ["kube_namespace:production", "phase:Evicted"]
+    baseline:
+      value: 0
+    incident:
+      value: 12  # 12 pods evicted
+
+  - name: kubernetes_state.pod.status_phase
+    type: gauge
+    tags: ["kube_namespace:production", "phase:Pending"]
+    baseline:
+      value: 0
+    incident:
+      value: 12  # Cannot reschedule
+
+  # Affected service metrics
+  - name: trace.api-service.request.errors
+    type: count
+    tags: ["service:api-service", "env:prod"]
+    baseline:
+      value: 5
+    incident:
+      pattern: spike
+      value: 300
+      noise: 50
+
+  - name: trace.order-service.request.errors
+    type: count
+    tags: ["service:order-service", "env:prod"]
+    baseline:
+      value: 2
+    incident:
+      value: 250
+      noise: 50
+
+  - name: trace.inventory-service.request.errors
+    type: count
+    tags: ["service:inventory-service", "env:prod"]
+    baseline:
+      value: 1
+    incident:
+      value: 200
+      noise: 40
+
+  # Remaining pods overloaded
+  - name: kubernetes.cpu.usage.total
+    type: gauge
+    tags: ["kube_deployment:api-service"]
+    baseline:
+      value: 200  # millicores
+      noise: 50
+    incident:
+      value: 950  # Near limit, handling extra load
+      noise: 50
+
+  - name: kubernetes_state.deployment.replicas_available
+    type: gauge
+    tags: ["kube_deployment:api-service", "kube_namespace:production"]
+    baseline:
+      value: 5
+    incident:
+      value: 2  # Only 2 of 5 available
+
+  - name: kubernetes_state.deployment.replicas_unavailable
+    type: gauge
+    tags: ["kube_deployment:api-service", "kube_namespace:production"]
+    baseline:
+      value: 0
+    incident:
+      value: 3
+
+logs:
+  baseline:
+    - timestamp_offset_minutes: -20
+      service: kubernetes
+      status: info
+      message: "All nodes healthy"
+
+  incident:
+    # Node pressure detection
+    - timestamp_offset_minutes: 0
+      service: kubernetes
+      host: worker-node-3
+      status: warn
+      message: "Node condition MemoryPressure is now: True"
+      attributes:
+        kubernetes.event.reason: NodeHasMemoryPressure
+        kubernetes.event.type: Warning
+        kubernetes.node.name: worker-node-3
+
+    # Pod evictions begin
+    - timestamp_offset_minutes: 1
+      service: kubernetes
+      status: warn
+      message: "Evicting pod api-service-7d8f9-abc12 due to node memory pressure"
+      attributes:
+        kubernetes.event.reason: Evicted
+        kubernetes.pod.name: api-service-7d8f9-abc12
+        kubernetes.node.name: worker-node-3
+        eviction.reason: "NodeMemoryPressure"
+
+    - timestamp_offset_minutes: 1
+      service: kubernetes
+      status: warn
+      message: "Evicting pod order-service-5c6d7-xyz89 due to node memory pressure"
+      attributes:
+        kubernetes.event.reason: Evicted
+        kubernetes.pod.name: order-service-5c6d7-xyz89
+
+    - timestamp_offset_minutes: 2
+      service: kubernetes
+      status: warn
+      message: "Evicting pod inventory-service-3a4b5-def45 due to node memory pressure"
+      attributes:
+        kubernetes.event.reason: Evicted
+        kubernetes.pod.name: inventory-service-3a4b5-def45
+
+    # Scheduling failures
+    - timestamp_offset_minutes: 3
+      service: kubernetes
+      status: error
+      message: "FailedScheduling: 0/5 nodes are available: 1 node has memory pressure, 4 nodes have insufficient memory"
+      attributes:
+        kubernetes.event.reason: FailedScheduling
+        kubernetes.pod.name: api-service-7d8f9-new01
+        scheduling.failure_reasons:
+          - "1 node(s) had taint {node.kubernetes.io/memory-pressure: }, that the pod didn't tolerate"
+          - "4 node(s) had insufficient memory"
+
+    - timestamp_offset_minutes: 4
+      service: kubernetes
+      status: error
+      message: "FailedScheduling: pod api-service-7d8f9-new01 cannot be scheduled"
+      attributes:
+        kubernetes.event.reason: FailedScheduling
+
+    # Service degradation
+    - timestamp_offset_minutes: 5
+      service: api-service
+      status: error
+      message: "Connection refused to order-service: no healthy endpoints"
+      attributes:
+        error.type: ConnectionRefusedException
+        downstream.service: order-service
+
+    - timestamp_offset_minutes: 6
+      service: api-service
+      status: error
+      message: "Service order-service has no available endpoints"
+      attributes:
+        error.type: NoEndpointsException
+
+    # HPA trying to help but can't schedule
+    - timestamp_offset_minutes: 7
+      service: kubernetes
+      status: warn
+      message: "HPA api-service-hpa unable to scale: insufficient cluster resources"
+      attributes:
+        kubernetes.event.reason: FailedRescale
+        hpa.name: api-service-hpa
+        hpa.desired_replicas: 8
+        hpa.current_replicas: 2
+
+    # Node eventually becomes NotReady
+    - timestamp_offset_minutes: 10
+      service: kubernetes
+      status: error
+      message: "Node worker-node-3 status is now: NotReady"
+      attributes:
+        kubernetes.event.reason: NodeNotReady
+        kubernetes.node.name: worker-node-3
+
+spans:
+  baseline:
+    - trace_id: trace-api-base-001
+      spans:
+        - span_id: span-api-001
+          service: api-service
+          resource: "POST /orders"
+          span_kind: server
+          duration_ns: 150000000
+          is_error: false
+
+        - span_id: span-order-001
+          service: api-service
+          resource: "order-service"
+          span_kind: client
+          duration_ns: 80000000
+          peer.service: order-service
+
+        - span_id: span-inventory-001
+          service: order-service
+          resource: "inventory-service"
+          span_kind: client
+          duration_ns: 40000000
+          peer.service: inventory-service
+
+  incident:
+    # Request hitting remaining pods (overloaded)
+    - trace_id: trace-api-inc-001
+      spans:
+        - span_id: span-api-inc-001
+          service: api-service
+          resource: "POST /orders"
+          span_kind: server
+          duration_ns: 2500000000  # 2.5s - overloaded
+          is_error: false
+
+        - span_id: span-order-inc-001
+          service: api-service
+          resource: "order-service"
+          span_kind: client
+          duration_ns: 2000000000
+          peer.service: order-service
+
+    # Request to evicted service
+    - trace_id: trace-api-inc-002
+      spans:
+        - span_id: span-api-inc-002
+          service: api-service
+          resource: "POST /orders"
+          span_kind: server
+          duration_ns: 100000000
+          is_error: true
+          http.status_code: 503
+
+        - span_id: span-order-inc-002
+          service: api-service
+          resource: "order-service"
+          span_kind: client
+          duration_ns: 50000000
+          is_error: true
+          peer.service: order-service
+          error.type: ConnectionRefusedException
+          error.message: "No healthy endpoints available"
+
+events:
+  - id: 5001
+    title: "Kubernetes: Node MemoryPressure"
+    text: "Node worker-node-3 is experiencing memory pressure"
+    date_happened_offset_minutes: 0
+    source: kubernetes
+    alert_type: warning
+    tags:
+      - kubernetes.node:worker-node-3
+
+  - id: 5002
+    title: "Kubernetes: Multiple pod evictions"
+    text: "12 pods evicted from worker-node-3 due to memory pressure"
+    date_happened_offset_minutes: 2
+    source: kubernetes
+    alert_type: error
+    tags:
+      - kubernetes.node:worker-node-3
+      - kubernetes.event.reason:Evicted
+
+  - id: 5003
+    title: "Alert: api-service degraded"
+    text: "api-service only 2/5 replicas available"
+    date_happened_offset_minutes: 3
+    source: datadog
+    alert_type: error
+    tags:
+      - service:api-service
+
+  - id: 5004
+    title: "Kubernetes: Node NotReady"
+    text: "Node worker-node-3 is now NotReady"
+    date_happened_offset_minutes: 10
+    source: kubernetes
+    alert_type: error
+    tags:
+      - kubernetes.node:worker-node-3
+
+  # Potential root cause event
+  - id: 5005
+    title: "Deployment: batch-processor v3.0.0"
+    text: |
+      Deployed batch-processor with increased memory requirements.
+      New: 8GB memory request (was 4GB)
+    date_happened_offset_minutes: -60
+    source: deploy
+    alert_type: info
+    tags:
+      - service:batch-processor
+      - version:3.0.0
+
+expected_rca:
+  root_cause: "Node memory exhaustion triggered by batch-processor deployment"
+  contributing_factors:
+    - "batch-processor v3.0.0 increased memory from 4GB to 8GB"
+    - "Node worker-node-3 became overcommitted"
+    - "Other nodes also near capacity, preventing rescheduling"
+    - "No pod disruption budgets to prevent mass eviction"
+  recommended_actions:
+    - "Add more nodes to the cluster"
+    - "Implement pod disruption budgets"
+    - "Review batch-processor memory requirements"
+    - "Enable cluster autoscaler"
+    - "Set resource quotas per namespace"

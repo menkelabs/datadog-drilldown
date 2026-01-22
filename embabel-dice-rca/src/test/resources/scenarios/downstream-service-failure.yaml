@@ -1,0 +1,443 @@
+# Scenario: Downstream Service Failure
+#
+# Root Cause: A downstream payment service becomes unavailable due to
+# database issues, causing cascading failures upstream.
+#
+# This scenario simulates a typical microservices cascading failure.
+
+name: downstream-service-failure
+description: >
+  Error rate spike caused by downstream payment-service failure.
+  The payment service's database connection fails, causing timeout errors
+  that cascade to the checkout service and eventually the API gateway.
+
+timing:
+  incident_start: "2026-01-17T10:00:00Z"
+  baseline_window_minutes: 30
+  incident_window_minutes: 30
+
+scope:
+  primary_service: checkout-service
+  downstream_service: payment-service
+  environment: prod
+
+monitor:
+  id: 34567
+  name: "Checkout Service Error Rate"
+  type: metric alert
+  query: "sum(last_5m):sum:trace.checkout-service.request.errors{env:prod}.as_count() / sum:trace.checkout-service.request.hits{env:prod}.as_count() > 0.05"
+  message: "Checkout service error rate above 5%. Check downstream services."
+  tags:
+    - service:checkout-service
+    - env:prod
+    - team:payments
+
+metrics:
+  # Checkout service metrics (affected)
+  - name: trace.checkout-service.request.errors
+    type: count
+    tags: ["service:checkout-service", "env:prod"]
+    baseline:
+      value: 3
+      noise: 2
+    incident:
+      pattern: spike
+      value: 500
+      noise: 100
+
+  - name: trace.checkout-service.request.hits
+    type: count
+    tags: ["service:checkout-service", "env:prod"]
+    baseline:
+      value: 1000
+    incident:
+      value: 1000  # same traffic, more errors
+
+  - name: trace.checkout-service.request.duration
+    type: gauge
+    unit: millisecond
+    tags: ["service:checkout-service", "env:prod"]
+    baseline:
+      value: 200
+      noise: 50
+    incident:
+      pattern: bimodal  # Some fast (circuit breaker), some slow (timeout)
+      value_fast: 50  # Circuit breaker open - fast fail
+      value_slow: 5000  # Timeout waiting for payment-service
+      slow_ratio: 0.3
+
+  # Payment service metrics (ROOT CAUSE)
+  - name: trace.payment-service.request.errors
+    type: count
+    tags: ["service:payment-service", "env:prod"]
+    baseline:
+      value: 0
+    incident:
+      pattern: spike
+      value: 2000  # All requests failing
+      noise: 200
+
+  - name: trace.payment-service.request.hits
+    type: count
+    tags: ["service:payment-service", "env:prod"]
+    baseline:
+      value: 500
+    incident:
+      value: 500
+
+  - name: trace.payment-service.request.duration
+    type: gauge
+    unit: millisecond
+    tags: ["service:payment-service", "env:prod"]
+    baseline:
+      value: 100
+      noise: 30
+    incident:
+      value: 5000  # Timing out
+
+  # Circuit breaker metrics
+  - name: circuit_breaker.payment.state
+    type: gauge
+    tags: ["service:checkout-service", "circuit:payment-service"]
+    baseline:
+      value: 0  # CLOSED
+    incident:
+      pattern: step_change
+      transitions:
+        - offset_minutes: 2
+          value: 1  # OPEN
+        - offset_minutes: 5
+          value: 2  # HALF_OPEN
+        - offset_minutes: 6
+          value: 1  # OPEN again (still failing)
+
+  - name: circuit_breaker.payment.failure_rate
+    type: gauge
+    unit: percent
+    tags: ["service:checkout-service", "circuit:payment-service"]
+    baseline:
+      value: 0.5
+      noise: 0.3
+    incident:
+      value: 100  # 100% failures
+
+  # Payment service DB metrics (ACTUAL ROOT CAUSE)
+  - name: postgresql.connections.active
+    type: gauge
+    tags: ["db:payment-db", "env:prod"]
+    baseline:
+      value: 30
+      noise: 10
+    incident:
+      value: 0  # No connections
+
+  - name: postgresql.replication.delay
+    type: gauge
+    unit: second
+    tags: ["db:payment-db", "env:prod"]
+    baseline:
+      value: 0
+    incident:
+      value: -1  # Replica unreachable
+
+  # Network metrics showing connectivity issue
+  - name: system.net.tcp.retransmits
+    type: count
+    tags: ["host:payment-db-primary"]
+    baseline:
+      value: 5
+    incident:
+      value: 500
+
+logs:
+  baseline:
+    - timestamp_offset_minutes: -20
+      service: checkout-service
+      status: info
+      message: "Payment processed: order-12345, amount=$99.99"
+
+    - timestamp_offset_minutes: -15
+      service: payment-service
+      status: info
+      message: "Transaction completed: txn-abc123"
+
+  incident:
+    # Payment service DB errors (ROOT CAUSE)
+    - timestamp_offset_minutes: 0
+      service: payment-service
+      status: error
+      message: "FATAL: connection to server at 'payment-db-primary' failed: Connection refused"
+      attributes:
+        error.type: PSQLException
+        error.message: "Connection refused"
+        db.host: payment-db-primary
+        db.port: 5432
+
+    - timestamp_offset_minutes: 0
+      service: payment-service
+      status: error
+      message: "HikariPool-1 - Connection is not available, pool exhausted"
+      attributes:
+        error.type: SQLException
+        pool.active: 0
+        pool.max: 50
+
+    # Checkout service seeing payment failures
+    - timestamp_offset_minutes: 1
+      service: checkout-service
+      status: error
+      message: "Failed to process payment: Connection to payment-service timed out after 5000ms"
+      attributes:
+        error.type: TimeoutException
+        downstream.service: payment-service
+        downstream.url: "http://payment-service:8080/api/v1/payments"
+        timeout_ms: 5000
+
+    - timestamp_offset_minutes: 2
+      service: checkout-service
+      status: error
+      message: "HTTP 503: Service Unavailable from payment-service"
+      attributes:
+        error.type: HttpClientException
+        http.status_code: 503
+        downstream.service: payment-service
+
+    # Circuit breaker events
+    - timestamp_offset_minutes: 2
+      service: checkout-service
+      status: warn
+      message: "CircuitBreaker 'payment-service' state changed: CLOSED -> OPEN"
+      attributes:
+        circuit.name: payment-service
+        circuit.state: OPEN
+        circuit.failure_rate: 100
+        circuit.failure_count: 50
+
+    - timestamp_offset_minutes: 3
+      service: checkout-service
+      status: warn
+      message: "CircuitBreaker OPEN: Rejecting requests to payment-service"
+      attributes:
+        circuit.name: payment-service
+        circuit.state: OPEN
+
+    # Fallback behavior
+    - timestamp_offset_minutes: 3
+      service: checkout-service
+      status: warn
+      message: "Payment circuit open - returning fallback error to client"
+      attributes:
+        fallback.type: PAYMENT_UNAVAILABLE
+        circuit.name: payment-service
+
+    - timestamp_offset_minutes: 5
+      service: checkout-service
+      status: info
+      message: "CircuitBreaker 'payment-service' attempting half-open"
+      attributes:
+        circuit.name: payment-service
+        circuit.state: HALF_OPEN
+
+    - timestamp_offset_minutes: 6
+      service: checkout-service
+      status: warn
+      message: "CircuitBreaker 'payment-service' state changed: HALF_OPEN -> OPEN (still failing)"
+      attributes:
+        circuit.name: payment-service
+        circuit.state: OPEN
+
+    # More payment service DB errors
+    - timestamp_offset_minutes: 10
+      service: payment-service
+      status: error
+      message: "FATAL: could not connect to server: Network is unreachable"
+      attributes:
+        error.type: PSQLException
+        db.host: payment-db-primary
+
+    # Kubernetes health check failures
+    - timestamp_offset_minutes: 12
+      service: kubernetes
+      status: warn
+      message: "Readiness probe failed: HTTP probe failed with statuscode: 503"
+      attributes:
+        kubernetes.event.reason: Unhealthy
+        kubernetes.pod.name: payment-service-xyz-123
+        probe.type: readiness
+
+spans:
+  baseline:
+    # Normal checkout flow
+    - trace_id: trace-checkout-base-001
+      spans:
+        - span_id: span-checkout-001
+          service: checkout-service
+          resource: "POST /checkout"
+          span_kind: server
+          duration_ns: 200000000  # 200ms
+          is_error: false
+          http.status_code: 200
+
+        - span_id: span-payment-001
+          service: checkout-service
+          resource: "payment-service"
+          span_kind: client
+          duration_ns: 100000000  # 100ms
+          is_error: false
+          peer.service: payment-service
+          http.url: "http://payment-service:8080/api/v1/payments"
+          http.status_code: 200
+
+        - span_id: span-payment-server-001
+          service: payment-service
+          resource: "POST /api/v1/payments"
+          span_kind: server
+          duration_ns: 80000000  # 80ms
+          is_error: false
+
+        - span_id: span-payment-db-001
+          service: payment-service
+          resource: "INSERT INTO transactions"
+          span_kind: client
+          duration_ns: 20000000  # 20ms
+          peer.service: postgres
+          db.type: postgresql
+
+  incident:
+    # Timeout waiting for payment service
+    - trace_id: trace-checkout-inc-001
+      spans:
+        - span_id: span-checkout-inc-001
+          service: checkout-service
+          resource: "POST /checkout"
+          span_kind: server
+          duration_ns: 5100000000  # 5.1 seconds
+          is_error: true
+          http.status_code: 504
+
+        - span_id: span-payment-inc-001
+          service: checkout-service
+          resource: "payment-service"
+          span_kind: client
+          duration_ns: 5000000000  # 5 second timeout
+          is_error: true
+          peer.service: payment-service
+          http.status_code: 504
+          error.message: "Connection timeout"
+
+    # Circuit breaker fast fail
+    - trace_id: trace-checkout-inc-002
+      spans:
+        - span_id: span-checkout-inc-002
+          service: checkout-service
+          resource: "POST /checkout"
+          span_kind: server
+          duration_ns: 50000000  # 50ms - fast fail
+          is_error: true
+          http.status_code: 503
+
+        - span_id: span-payment-inc-002
+          service: checkout-service
+          resource: "payment-service"
+          span_kind: client
+          duration_ns: 1000000  # 1ms - circuit breaker reject
+          is_error: true
+          peer.service: payment-service
+          error.type: CircuitBreakerOpenException
+          error.message: "CircuitBreaker 'payment-service' is OPEN"
+
+    # Payment service internal failure
+    - trace_id: trace-payment-inc-001
+      spans:
+        - span_id: span-payment-inc-server
+          service: payment-service
+          resource: "POST /api/v1/payments"
+          span_kind: server
+          duration_ns: 5000000000
+          is_error: true
+          http.status_code: 503
+
+        - span_id: span-payment-inc-db
+          service: payment-service
+          resource: "INSERT INTO transactions"
+          span_kind: client
+          duration_ns: 5000000000
+          is_error: true
+          peer.service: postgres
+          error.type: PSQLException
+          error.message: "Connection refused"
+
+events:
+  # Database incident (ROOT CAUSE)
+  - id: 3001
+    title: "Database: payment-db-primary unreachable"
+    text: |
+      Payment database primary node became unreachable.
+      Network connectivity issue detected between payment-service and database.
+    date_happened_offset_minutes: 0
+    source: datadog
+    alert_type: error
+    tags:
+      - db:payment-db
+      - env:prod
+
+  # Automatic failover attempt
+  - id: 3002
+    title: "Database: Attempting failover to payment-db-replica"
+    text: "Automatic failover initiated due to primary node failure"
+    date_happened_offset_minutes: 1
+    source: postgres
+    alert_type: warning
+    tags:
+      - db:payment-db
+
+  # Service alert
+  - id: 3003
+    title: "Alert: payment-service error rate > 50%"
+    text: "Payment service error rate exceeded 50% threshold"
+    date_happened_offset_minutes: 1
+    source: datadog
+    alert_type: error
+    tags:
+      - service:payment-service
+      - monitor:34568
+
+  # Upstream cascade
+  - id: 3004
+    title: "Alert: checkout-service error rate > 5%"
+    text: "Checkout service error rate exceeded threshold, likely due to downstream issues"
+    date_happened_offset_minutes: 2
+    source: datadog
+    alert_type: error
+    tags:
+      - service:checkout-service
+      - monitor:34567
+
+  # Health check failures
+  - id: 3005
+    title: "Kubernetes: payment-service pods unhealthy"
+    text: "Multiple payment-service pods failing readiness checks"
+    date_happened_offset_minutes: 12
+    source: kubernetes
+    alert_type: warning
+    tags:
+      - service:payment-service
+      - kube_namespace:production
+
+expected_rca:
+  root_cause: "Payment database (payment-db-primary) became unreachable"
+  contributing_factors:
+    - "Network connectivity issue between payment-service and payment-db"
+    - "No automatic failover to replica completed successfully"
+    - "Circuit breaker limited blast radius but checkout still affected"
+  propagation_path:
+    - "payment-db-primary network failure"
+    - "payment-service connection pool exhausted"
+    - "payment-service returns 503"
+    - "checkout-service circuit breaker opens"
+    - "checkout-service returns 503 to clients"
+  recommended_actions:
+    - "Investigate network connectivity to payment-db-primary"
+    - "Verify database failover mechanism"
+    - "Consider adding read replicas for payment-service queries"
+    - "Add more aggressive health checks for database connectivity"

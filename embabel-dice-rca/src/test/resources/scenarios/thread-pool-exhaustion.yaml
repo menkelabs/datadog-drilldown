@@ -1,0 +1,329 @@
+# Scenario: Thread Pool Exhaustion
+#
+# Root Cause: Slow downstream calls blocking threads, causing
+# thread pool exhaustion and request rejections.
+
+name: thread-pool-exhaustion
+description: >
+  Thread pool exhausted due to slow downstream dependency.
+  Blocking I/O operations holding threads, preventing new request processing.
+
+timing:
+  incident_start: "2026-01-30T12:00:00Z"
+  baseline_window_minutes: 30
+  incident_window_minutes: 30
+
+scope:
+  service: api-service
+  environment: prod
+  thread_pool: tomcat-exec
+
+monitor:
+  id: 77777
+  name: "Thread Pool Utilization"
+  type: metric alert
+  query: "avg(last_5m):avg:jvm.thread.pool.active{service:api-service,pool:tomcat-exec} / avg:jvm.thread.pool.max{service:api-service,pool:tomcat-exec} > 0.9"
+  message: "Thread pool near exhaustion. Check for blocking calls."
+  tags:
+    - service:api-service
+    - env:prod
+
+metrics:
+  # Thread pool metrics - KEY INDICATORS
+  - name: jvm.thread.pool.active
+    type: gauge
+    tags: ["service:api-service", "pool:tomcat-exec"]
+    baseline:
+      value: 50
+      noise: 20
+    incident:
+      value: 200  # At max
+      noise: 0
+
+  - name: jvm.thread.pool.max
+    type: gauge
+    tags: ["service:api-service", "pool:tomcat-exec"]
+    baseline:
+      value: 200
+    incident:
+      value: 200
+
+  - name: jvm.thread.pool.queue_size
+    type: gauge
+    tags: ["service:api-service", "pool:tomcat-exec"]
+    baseline:
+      value: 5
+    incident:
+      value: 1000  # Queue filling up
+
+  - name: jvm.thread.pool.rejected
+    type: count
+    tags: ["service:api-service", "pool:tomcat-exec"]
+    baseline:
+      value: 0
+    incident:
+      value: 500  # Rejecting requests
+
+  # Thread states
+  - name: jvm.thread.blocked
+    type: gauge
+    tags: ["service:api-service"]
+    baseline:
+      value: 5
+    incident:
+      value: 180  # Most threads blocked
+
+  - name: jvm.thread.waiting
+    type: gauge
+    tags: ["service:api-service"]
+    baseline:
+      value: 30
+    incident:
+      value: 10
+
+  - name: jvm.thread.runnable
+    type: gauge
+    tags: ["service:api-service"]
+    baseline:
+      value: 50
+    incident:
+      value: 5  # Few actually running
+
+  # Downstream latency (cause)
+  - name: trace.legacy-service.request.duration
+    type: gauge
+    unit: millisecond
+    tags: ["service:legacy-service", "env:prod"]
+    baseline:
+      value: 100
+      noise: 30
+    incident:
+      value: 30000  # 30 seconds!
+      noise: 5000
+
+  # Service impact
+  - name: trace.api-service.request.duration
+    type: gauge
+    unit: millisecond
+    tags: ["service:api-service", "env:prod"]
+    baseline:
+      value: 200
+      noise: 50
+    incident:
+      value: 30000
+      noise: 5000
+
+  - name: trace.api-service.request.errors
+    type: count
+    tags: ["service:api-service", "env:prod"]
+    baseline:
+      value: 5
+    incident:
+      value: 600
+      noise: 100
+
+  - name: http.responses
+    type: count
+    tags: ["service:api-service", "status_code:503"]
+    baseline:
+      value: 0
+    incident:
+      value: 500  # Thread pool rejection
+
+  # Connection pool (downstream)
+  - name: http.client.pool.active
+    type: gauge
+    tags: ["service:api-service", "target:legacy-service"]
+    baseline:
+      value: 20
+    incident:
+      value: 100  # All connections in use
+
+  - name: http.client.pool.pending
+    type: gauge
+    tags: ["service:api-service", "target:legacy-service"]
+    baseline:
+      value: 0
+    incident:
+      value: 150  # Waiting for connections
+
+logs:
+  baseline:
+    - timestamp_offset_minutes: -20
+      service: api-service
+      status: info
+      message: "Request completed in 180ms"
+
+  incident:
+    # Slow downstream detected
+    - timestamp_offset_minutes: 1
+      service: api-service
+      status: warn
+      message: "Slow response from legacy-service: 15000ms"
+      attributes:
+        downstream.service: legacy-service
+        downstream.latency_ms: 15000
+        downstream.expected_ms: 100
+
+    # Thread pool warnings
+    - timestamp_offset_minutes: 3
+      service: api-service
+      status: warn
+      message: "Thread pool 80% utilized: 160/200 active"
+      attributes:
+        pool.name: tomcat-exec
+        pool.active: 160
+        pool.max: 200
+        pool.queue: 50
+
+    - timestamp_offset_minutes: 5
+      service: api-service
+      status: error
+      message: "Thread pool exhausted: 200/200 active, queue: 500"
+      attributes:
+        pool.name: tomcat-exec
+        pool.active: 200
+        pool.max: 200
+        pool.queue: 500
+
+    # Request rejections
+    - timestamp_offset_minutes: 5
+      service: api-service
+      status: error
+      message: "RejectedExecutionException: Task rejected from ThreadPoolExecutor"
+      attributes:
+        error.type: RejectedExecutionException
+        pool.name: tomcat-exec
+        error.stack: |
+          java.util.concurrent.RejectedExecutionException: Task rejected from ThreadPoolExecutor
+            at java.util.concurrent.ThreadPoolExecutor$AbortPolicy.rejectedExecution(ThreadPoolExecutor.java:2063)
+            at java.util.concurrent.ThreadPoolExecutor.reject(ThreadPoolExecutor.java:830)
+
+    # Thread dump insight
+    - timestamp_offset_minutes: 7
+      service: api-service
+      status: warn
+      message: "Thread dump: 180 threads blocked on legacy-service HTTP call"
+      attributes:
+        threads.blocked: 180
+        blocking.operation: "SocketInputStream.read"
+        blocking.target: "legacy-service:8080"
+
+    - timestamp_offset_minutes: 10
+      service: api-service
+      status: error
+      message: "Connection pool exhausted for legacy-service"
+      attributes:
+        pool.name: legacy-service-http-pool
+        pool.active: 100
+        pool.max: 100
+        pool.pending: 150
+
+    # Health check impact
+    - timestamp_offset_minutes: 12
+      service: api-service
+      status: error
+      message: "Health check failing: unable to acquire thread"
+      attributes:
+        health.endpoint: "/actuator/health"
+        error.reason: "RejectedExecutionException"
+
+spans:
+  baseline:
+    - trace_id: trace-api-base-001
+      spans:
+        - span_id: span-api-001
+          service: api-service
+          resource: "GET /api/data"
+          span_kind: server
+          duration_ns: 200000000
+          is_error: false
+
+        - span_id: span-legacy-001
+          service: api-service
+          resource: "legacy-service/fetch"
+          span_kind: client
+          duration_ns: 100000000
+          peer.service: legacy-service
+
+  incident:
+    # Slow request (thread stuck)
+    - trace_id: trace-api-inc-001
+      spans:
+        - span_id: span-api-inc-001
+          service: api-service
+          resource: "GET /api/data"
+          span_kind: server
+          duration_ns: 30000000000  # 30 seconds
+          is_error: false
+
+        - span_id: span-legacy-inc-001
+          service: api-service
+          resource: "legacy-service/fetch"
+          span_kind: client
+          duration_ns: 29500000000  # 29.5 seconds
+          peer.service: legacy-service
+
+    # Rejected request
+    - trace_id: trace-api-inc-002
+      spans:
+        - span_id: span-api-inc-002
+          service: api-service
+          resource: "GET /api/data"
+          span_kind: server
+          duration_ns: 5000000  # 5ms - fast rejection
+          is_error: true
+          http.status_code: 503
+          error.type: RejectedExecutionException
+
+events:
+  - id: 77001
+    title: "Alert: legacy-service latency spike"
+    text: "legacy-service response time increased to 30 seconds"
+    date_happened_offset_minutes: 0
+    source: datadog
+    alert_type: warning
+    tags:
+      - service:legacy-service
+
+  - id: 77002
+    title: "Alert: api-service thread pool > 90%"
+    text: "Thread pool nearing exhaustion"
+    date_happened_offset_minutes: 3
+    source: datadog
+    alert_type: warning
+    tags:
+      - service:api-service
+
+  - id: 77003
+    title: "Alert: api-service 503 errors"
+    text: "api-service returning 503 Service Unavailable"
+    date_happened_offset_minutes: 5
+    source: datadog
+    alert_type: error
+    tags:
+      - service:api-service
+
+  - id: 77004
+    title: "Incident: legacy-service database migration"
+    text: "Unplanned lock during database migration affecting legacy-service"
+    date_happened_offset_minutes: 0
+    source: operations
+    alert_type: error
+    tags:
+      - service:legacy-service
+      - type:database_migration
+
+expected_rca:
+  root_cause: "legacy-service database migration causing 30s response times"
+  contributing_factors:
+    - "Synchronous/blocking calls to legacy-service"
+    - "No timeout configured for downstream calls"
+    - "Thread pool exhausted waiting for slow responses"
+    - "No circuit breaker for legacy-service"
+  recommended_actions:
+    - "Add timeouts to legacy-service calls (e.g., 5s)"
+    - "Implement circuit breaker pattern"
+    - "Consider async/non-blocking I/O for downstream calls"
+    - "Add bulkhead pattern to isolate legacy-service calls"
+    - "Coordinate database migrations with dependent services"

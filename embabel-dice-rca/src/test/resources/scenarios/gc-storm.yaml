@@ -1,0 +1,335 @@
+# Scenario: Garbage Collection Storm
+#
+# Root Cause: Large object allocation triggering frequent full GCs,
+# causing application pauses and timeouts.
+
+name: gc-storm
+description: >
+  Garbage collection storm causing severe application latency.
+  A new feature causes large object allocations triggering Full GC cycles.
+
+timing:
+  incident_start: "2026-01-28T09:00:00Z"
+  baseline_window_minutes: 30
+  incident_window_minutes: 30
+
+scope:
+  service: report-service
+  environment: prod
+  jvm_heap: 8GB
+
+monitor:
+  id: 55555
+  name: "JVM GC Pause Time"
+  type: metric alert
+  query: "avg(last_5m):avg:jvm.gc.pause_time{service:report-service,env:prod} > 1000"
+  message: "GC pause time exceeds 1 second. Check for memory issues."
+  tags:
+    - service:report-service
+    - env:prod
+
+metrics:
+  # GC metrics - KEY INDICATORS
+  - name: jvm.gc.pause_time
+    type: gauge
+    unit: millisecond
+    tags: ["service:report-service", "gc:G1-Old-Generation"]
+    baseline:
+      value: 50
+      noise: 20
+    incident:
+      pattern: spike
+      value: 8000  # 8 second pauses!
+      peak_value: 15000
+      noise: 2000
+
+  - name: jvm.gc.count
+    type: count
+    tags: ["service:report-service", "gc:G1-Old-Generation"]
+    baseline:
+      value: 2  # per minute
+    incident:
+      value: 30  # Constant GC
+
+  - name: jvm.gc.count
+    type: count
+    tags: ["service:report-service", "gc:G1-Young-Generation"]
+    baseline:
+      value: 60  # per minute
+    incident:
+      value: 200  # Very frequent
+
+  - name: jvm.gc.time_percent
+    type: gauge
+    unit: percent
+    tags: ["service:report-service"]
+    baseline:
+      value: 2
+    incident:
+      value: 85  # 85% time in GC!
+
+  # Heap metrics
+  - name: jvm.heap.used
+    type: gauge
+    unit: byte
+    tags: ["service:report-service"]
+    baseline:
+      value: 3000000000  # 3GB
+      noise: 500000000
+    incident:
+      pattern: sawtooth
+      min_value: 5000000000  # 5GB
+      max_value: 7800000000  # 7.8GB
+      period_seconds: 10  # GC cycle
+
+  - name: jvm.heap.max
+    type: gauge
+    unit: byte
+    tags: ["service:report-service"]
+    baseline:
+      value: 8000000000  # 8GB
+    incident:
+      value: 8000000000
+
+  - name: jvm.heap.old_gen.used
+    type: gauge
+    unit: byte
+    tags: ["service:report-service"]
+    baseline:
+      value: 2000000000  # 2GB
+    incident:
+      value: 6500000000  # 6.5GB - mostly old gen
+
+  # Object allocation
+  - name: jvm.memory.allocation_rate
+    type: gauge
+    unit: byte
+    tags: ["service:report-service"]
+    baseline:
+      value: 100000000  # 100MB/s
+    incident:
+      value: 2000000000  # 2GB/s allocation!
+
+  # Large object allocations
+  - name: jvm.memory.humongous_allocations
+    type: count
+    tags: ["service:report-service"]
+    baseline:
+      value: 0
+    incident:
+      value: 500  # Many large objects
+
+  # Service impact
+  - name: trace.report-service.request.duration
+    type: gauge
+    unit: millisecond
+    tags: ["service:report-service"]
+    baseline:
+      value: 500
+      noise: 100
+    incident:
+      pattern: spike
+      value: 15000
+      peak_value: 30000
+      noise: 5000
+
+  - name: trace.report-service.request.errors
+    type: count
+    tags: ["service:report-service", "error.type:TimeoutException"]
+    baseline:
+      value: 1
+    incident:
+      value: 200
+
+  # Thread metrics
+  - name: jvm.thread.blocked_count
+    type: gauge
+    tags: ["service:report-service"]
+    baseline:
+      value: 2
+    incident:
+      value: 100  # All threads blocked during GC
+
+  - name: jvm.thread.runnable_count
+    type: gauge
+    tags: ["service:report-service"]
+    baseline:
+      value: 50
+    incident:
+      value: 5  # Few threads running
+
+  # Safepoint metrics
+  - name: jvm.safepoint.time
+    type: gauge
+    unit: millisecond
+    tags: ["service:report-service"]
+    baseline:
+      value: 10
+    incident:
+      value: 8000
+
+logs:
+  baseline:
+    - timestamp_offset_minutes: -20
+      service: report-service
+      status: info
+      message: "Report generated in 450ms: monthly-sales-report"
+
+  incident:
+    - timestamp_offset_minutes: 1
+      service: report-service
+      status: warn
+      message: "Long GC pause: 3500ms (G1 Evacuation Pause)"
+      attributes:
+        gc.type: "G1 Evacuation Pause"
+        gc.pause_ms: 3500
+        gc.cause: "G1 Humongous Allocation"
+        heap.before_gc_mb: 7500
+        heap.after_gc_mb: 6000
+
+    - timestamp_offset_minutes: 2
+      service: report-service
+      status: warn
+      message: "High memory allocation rate: 2GB/s"
+      attributes:
+        allocation.rate_mb_s: 2000
+        allocation.source: "ReportDataAggregator"
+
+    - timestamp_offset_minutes: 3
+      service: report-service
+      status: error
+      message: "GC overhead limit exceeded - spent 85% of time in GC"
+      attributes:
+        gc.overhead_percent: 85
+        gc.threshold_percent: 80
+
+    - timestamp_offset_minutes: 5
+      service: report-service
+      status: warn
+      message: "Full GC triggered: 8500ms pause"
+      attributes:
+        gc.type: "G1 Full GC"
+        gc.pause_ms: 8500
+        gc.cause: "Allocation Failure"
+        heap.before_gc_mb: 7800
+        heap.after_gc_mb: 5500
+
+    - timestamp_offset_minutes: 5
+      service: report-service
+      status: error
+      message: "Request timeout during GC pause"
+      attributes:
+        error.type: TimeoutException
+        request.path: "/api/reports/annual"
+        gc.pause_during_request_ms: 8500
+
+    - timestamp_offset_minutes: 10
+      service: report-service
+      status: error
+      message: "Humongous allocation detected: 50MB ArrayList"
+      attributes:
+        allocation.size_mb: 50
+        allocation.class: "java.util.ArrayList"
+        allocation.stack: |
+          at java.util.ArrayList.grow(ArrayList.java:265)
+          at com.example.reports.aggregator.ReportDataAggregator.collectAllData(ReportDataAggregator.java:89)
+          at com.example.reports.service.ReportService.generateReport(ReportService.java:45)
+
+    - timestamp_offset_minutes: 15
+      service: report-service
+      status: error
+      message: "Consecutive Full GCs: possible memory leak"
+      attributes:
+        full_gc.count_last_5min: 15
+        heap.freed_per_gc_mb: 300
+
+spans:
+  baseline:
+    - trace_id: trace-report-base-001
+      spans:
+        - span_id: span-report-001
+          service: report-service
+          resource: "GET /api/reports/monthly"
+          span_kind: server
+          duration_ns: 500000000  # 500ms
+          is_error: false
+
+  incident:
+    # Request interrupted by GC
+    - trace_id: trace-report-inc-001
+      spans:
+        - span_id: span-report-inc-001
+          service: report-service
+          resource: "GET /api/reports/monthly"
+          span_kind: server
+          duration_ns: 12000000000  # 12 seconds
+          is_error: false
+          gc.pause_during_request_ms: 8500
+
+        - span_id: span-db-inc-001
+          service: report-service
+          resource: "SELECT * FROM sales"
+          span_kind: client
+          duration_ns: 200000000  # DB was fast
+          peer.service: postgres
+
+    # Timed out request
+    - trace_id: trace-report-inc-002
+      spans:
+        - span_id: span-report-inc-002
+          service: report-service
+          resource: "GET /api/reports/annual"
+          span_kind: server
+          duration_ns: 30000000000  # 30s timeout
+          is_error: true
+          http.status_code: 504
+
+events:
+  - id: 55001
+    title: "Deployment: report-service v3.2.0"
+    text: |
+      Deployed report-service with new annual report feature.
+      
+      Changes:
+      - New annual report aggregation
+      - In-memory data caching for performance
+      - Removed pagination for full data load
+    date_happened_offset_minutes: -30
+    source: deploy
+    alert_type: info
+    tags:
+      - service:report-service
+      - version:3.2.0
+
+  - id: 55002
+    title: "Alert: GC pause time > 1s"
+    text: "Report service experiencing long GC pauses"
+    date_happened_offset_minutes: 1
+    source: datadog
+    alert_type: warning
+    tags:
+      - service:report-service
+
+  - id: 55003
+    title: "Alert: GC overhead limit"
+    text: "JVM spending 85% of time in garbage collection"
+    date_happened_offset_minutes: 3
+    source: datadog
+    alert_type: error
+    tags:
+      - service:report-service
+
+expected_rca:
+  root_cause: "report-service v3.2.0 loads full dataset into memory"
+  contributing_factors:
+    - "Removed pagination - loads all records at once"
+    - "Annual report processes millions of records in memory"
+    - "50MB+ ArrayList allocations trigger humongous allocations"
+    - "G1GC struggles with humongous regions"
+  recommended_actions:
+    - "Rollback to v3.1.x immediately"
+    - "Implement streaming/pagination for large reports"
+    - "Use database-side aggregation instead of in-memory"
+    - "Increase heap size as temporary mitigation"
+    - "Consider switching to ZGC for large heap"
+    - "Add memory profiling to CI pipeline"

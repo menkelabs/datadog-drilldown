@@ -1,0 +1,302 @@
+# Scenario: Redis Cache Failure
+#
+# Root Cause: Redis primary node fails, causing cache misses and
+# increased load on the database as a fallback.
+
+name: redis-cache-failure
+description: >
+  Redis cache becomes unavailable, causing 100% cache miss rate.
+  All requests fall back to the database, overwhelming it with load.
+
+timing:
+  incident_start: "2026-01-18T09:00:00Z"
+  baseline_window_minutes: 30
+  incident_window_minutes: 30
+
+scope:
+  service: product-service
+  environment: prod
+  cache: redis-primary
+
+monitor:
+  id: 45678
+  name: "Product Service Cache Miss Rate"
+  type: metric alert
+  query: "avg(last_5m):avg:app.cache.miss_rate{service:product-service,env:prod} > 50"
+  message: "Cache miss rate exceeded 50%. Check Redis connectivity."
+  tags:
+    - service:product-service
+    - env:prod
+
+metrics:
+  # Cache metrics
+  - name: app.cache.miss_rate
+    type: gauge
+    unit: percent
+    tags: ["service:product-service", "cache:redis"]
+    baseline:
+      value: 5
+      noise: 2
+    incident:
+      value: 100  # All misses
+
+  - name: app.cache.hit_rate
+    type: gauge
+    unit: percent
+    tags: ["service:product-service", "cache:redis"]
+    baseline:
+      value: 95
+      noise: 2
+    incident:
+      value: 0
+
+  # Redis metrics
+  - name: redis.clients.connected
+    type: gauge
+    tags: ["redis_host:redis-primary", "env:prod"]
+    baseline:
+      value: 50
+      noise: 10
+    incident:
+      value: 0  # No connections
+
+  - name: redis.net.rejected_connections
+    type: count
+    tags: ["redis_host:redis-primary", "env:prod"]
+    baseline:
+      value: 0
+    incident:
+      pattern: spike
+      value: 500
+      noise: 100
+
+  - name: redis.info.master_link_status
+    type: gauge
+    tags: ["redis_host:redis-replica", "env:prod"]
+    baseline:
+      value: 1  # Connected
+    incident:
+      value: 0  # Disconnected
+
+  # Database load increase (fallback)
+  - name: postgresql.queries.count
+    type: count
+    tags: ["db:products-db", "env:prod"]
+    baseline:
+      value: 100
+      noise: 20
+    incident:
+      pattern: spike
+      value: 5000  # 50x increase
+      noise: 500
+
+  - name: postgresql.connections.active
+    type: gauge
+    tags: ["db:products-db", "env:prod"]
+    baseline:
+      value: 20
+      noise: 5
+    incident:
+      value: 95  # Near saturation
+      noise: 5
+
+  # Service latency
+  - name: trace.product-service.request.duration
+    type: gauge
+    unit: millisecond
+    tags: ["service:product-service", "env:prod"]
+    baseline:
+      value: 20  # Fast with cache
+      noise: 5
+    incident:
+      value: 350  # Slow without cache
+      noise: 100
+
+  - name: trace.product-service.request.errors
+    type: count
+    tags: ["service:product-service", "env:prod"]
+    baseline:
+      value: 1
+    incident:
+      value: 50  # Some DB timeouts
+      noise: 20
+
+logs:
+  baseline:
+    - timestamp_offset_minutes: -20
+      service: product-service
+      status: info
+      message: "Cache hit for product-12345"
+
+  incident:
+    - timestamp_offset_minutes: 0
+      service: product-service
+      status: error
+      message: "RedisConnectionException: Unable to connect to redis-primary:6379"
+      attributes:
+        error.type: RedisConnectionException
+        error.message: "Connection refused"
+        redis.host: redis-primary
+        redis.port: 6379
+
+    - timestamp_offset_minutes: 0
+      service: product-service
+      status: warn
+      message: "Cache fallback activated: querying database directly"
+      attributes:
+        fallback.reason: "Redis connection failed"
+        fallback.target: "products-db"
+
+    - timestamp_offset_minutes: 1
+      service: product-service
+      status: error
+      message: "Redis: Connection reset by peer"
+      attributes:
+        error.type: RedisConnectionException
+
+    - timestamp_offset_minutes: 2
+      service: product-service
+      status: warn
+      message: "High database load detected: 95 active connections"
+      attributes:
+        db.connections.active: 95
+        db.connections.max: 100
+
+    - timestamp_offset_minutes: 5
+      service: product-service
+      status: error
+      message: "Database query timeout: SELECT * FROM products WHERE id = $1"
+      attributes:
+        error.type: QueryTimeoutException
+        db.statement: "SELECT * FROM products WHERE id = $1"
+        timeout_ms: 5000
+
+    - timestamp_offset_minutes: 5
+      service: kubernetes
+      status: warn
+      message: "Pod redis-primary-0 not ready"
+      attributes:
+        kubernetes.event.reason: Unhealthy
+        kubernetes.pod.name: redis-primary-0
+
+    - timestamp_offset_minutes: 10
+      service: redis
+      status: error
+      message: "MASTER aborted replication with replica"
+      attributes:
+        redis.role: master
+        error.type: ReplicationError
+
+spans:
+  baseline:
+    - trace_id: trace-product-base-001
+      spans:
+        - span_id: span-product-001
+          service: product-service
+          resource: "GET /products/{id}"
+          span_kind: server
+          duration_ns: 20000000  # 20ms
+          is_error: false
+
+        - span_id: span-redis-001
+          service: product-service
+          resource: "GET product:12345"
+          span_kind: client
+          duration_ns: 2000000  # 2ms cache hit
+          peer.service: redis
+          cache.hit: true
+
+  incident:
+    - trace_id: trace-product-inc-001
+      spans:
+        - span_id: span-product-inc-001
+          service: product-service
+          resource: "GET /products/{id}"
+          span_kind: server
+          duration_ns: 350000000  # 350ms
+          is_error: false
+
+        - span_id: span-redis-inc-001
+          service: product-service
+          resource: "GET product:12345"
+          span_kind: client
+          duration_ns: 5000000  # 5ms timeout
+          is_error: true
+          peer.service: redis
+          error.type: RedisConnectionException
+
+        - span_id: span-db-fallback-001
+          service: product-service
+          resource: "SELECT * FROM products WHERE id = $1"
+          span_kind: client
+          duration_ns: 300000000  # 300ms DB query
+          peer.service: postgres
+          db.type: postgresql
+
+    - trace_id: trace-product-inc-002
+      spans:
+        - span_id: span-product-inc-002
+          service: product-service
+          resource: "GET /products/{id}"
+          span_kind: server
+          duration_ns: 5100000000  # 5.1s timeout
+          is_error: true
+          http.status_code: 504
+
+        - span_id: span-redis-inc-002
+          service: product-service
+          resource: "GET product:67890"
+          span_kind: client
+          duration_ns: 5000000
+          is_error: true
+          peer.service: redis
+
+        - span_id: span-db-inc-002
+          service: product-service
+          resource: "SELECT * FROM products WHERE id = $1"
+          span_kind: client
+          duration_ns: 5000000000  # DB also timing out
+          is_error: true
+          peer.service: postgres
+          error.message: "Query timeout"
+
+events:
+  - id: 4001
+    title: "Alert: Redis connectivity lost"
+    text: "Unable to connect to redis-primary:6379"
+    date_happened_offset_minutes: 0
+    source: datadog
+    alert_type: error
+    tags:
+      - redis_host:redis-primary
+
+  - id: 4002
+    title: "Kubernetes: redis-primary-0 pod evicted"
+    text: "Pod evicted due to node memory pressure"
+    date_happened_offset_minutes: 0
+    source: kubernetes
+    alert_type: warning
+    tags:
+      - kube_statefulset:redis
+      - kubernetes.event.reason:Evicted
+
+  - id: 4003
+    title: "Alert: Database connection pool near capacity"
+    text: "products-db connection pool at 95% capacity"
+    date_happened_offset_minutes: 2
+    source: datadog
+    alert_type: warning
+    tags:
+      - db:products-db
+
+expected_rca:
+  root_cause: "Redis primary pod evicted due to node memory pressure"
+  contributing_factors:
+    - "No Redis sentinel/cluster for automatic failover"
+    - "Cache fallback overwhelmed database"
+    - "Database connection pool undersized for full load"
+  recommended_actions:
+    - "Implement Redis Sentinel or Cluster for HA"
+    - "Add circuit breaker for cache fallback"
+    - "Increase database connection pool size"
+    - "Add cache-aside pattern with stale data serving"

@@ -1,0 +1,421 @@
+# Scenario: Kubernetes Pod OOMKilled
+#
+# Root Cause: A memory leak in the application causes pods to exceed their
+# memory limits and get OOMKilled by Kubernetes.
+#
+# This scenario simulates a memory exhaustion incident in a Kubernetes environment.
+
+name: kubernetes-oom
+description: >
+  Memory exhaustion causing pods to be OOMKilled by Kubernetes.
+  A memory leak causes gradual increase until pods hit their memory limits.
+
+timing:
+  incident_start: "2026-01-16T14:00:00Z"
+  baseline_window_minutes: 30
+  incident_window_minutes: 30
+
+scope:
+  service: order-service
+  environment: prod
+  namespace: production
+  deployment: order-service
+  pods:
+    - order-service-7b8c9d-abc12
+    - order-service-7b8c9d-def34
+    - order-service-7b8c9d-ghi56
+
+monitor:
+  id: 23456
+  name: "Order Service Memory Usage"
+  type: metric alert
+  query: "avg(last_5m):avg:kubernetes.memory.usage{kube_deployment:order-service,kube_namespace:production} / avg:kubernetes.memory.limits{kube_deployment:order-service,kube_namespace:production} > 0.9"
+  message: "Order service memory usage above 90%. Check for memory leaks."
+  tags:
+    - service:order-service
+    - env:prod
+    - team:orders
+
+metrics:
+  # Kubernetes memory metrics
+  - name: kubernetes.memory.usage
+    type: gauge
+    unit: byte
+    tags: ["kube_deployment:order-service", "kube_namespace:production"]
+    baseline:
+      pattern: normal
+      value: 536870912  # 512MB
+      noise: 50000000
+    incident:
+      pattern: gradual_increase
+      value: 1073741824  # 1GB (at limit)
+      peak_value: 1100000000  # slightly over before OOM
+      noise: 10000000
+
+  - name: kubernetes.memory.limits
+    type: gauge
+    unit: byte
+    tags: ["kube_deployment:order-service", "kube_namespace:production"]
+    baseline:
+      value: 1073741824  # 1GB limit
+    incident:
+      value: 1073741824
+
+  - name: kubernetes.memory.requests
+    type: gauge
+    unit: byte
+    tags: ["kube_deployment:order-service", "kube_namespace:production"]
+    baseline:
+      value: 536870912  # 512MB request
+    incident:
+      value: 536870912
+
+  # Container restarts - KEY INDICATOR
+  - name: kubernetes.containers.restarts
+    type: count
+    tags: ["kube_deployment:order-service", "kube_namespace:production"]
+    baseline:
+      value: 0
+    incident:
+      pattern: step_increase
+      value: 5  # Multiple restarts
+      step_times:
+        - offset_minutes: 5
+        - offset_minutes: 15
+        - offset_minutes: 20
+        - offset_minutes: 25
+        - offset_minutes: 28
+
+  # Pod status
+  - name: kubernetes_state.pod.status_phase
+    type: gauge
+    tags: ["kube_deployment:order-service", "phase:Running"]
+    baseline:
+      value: 3  # 3 pods running
+    incident:
+      pattern: intermittent
+      value: 2  # Drops to 2 during restarts
+      intermittent_periods:
+        - start_offset: 5
+          end_offset: 7
+        - start_offset: 15
+          end_offset: 17
+
+  # JVM Heap metrics
+  - name: jvm.heap.used
+    type: gauge
+    unit: byte
+    tags: ["service:order-service", "env:prod"]
+    baseline:
+      value: 400000000  # 400MB
+      noise: 50000000
+    incident:
+      pattern: gradual_increase
+      value: 950000000  # 950MB (near 1GB heap max)
+      noise: 20000000
+
+  - name: jvm.heap.max
+    type: gauge
+    unit: byte
+    tags: ["service:order-service", "env:prod"]
+    baseline:
+      value: 1073741824  # 1GB
+    incident:
+      value: 1073741824
+
+  # GC metrics - indicator of memory pressure
+  - name: jvm.gc.pause_time
+    type: gauge
+    unit: millisecond
+    tags: ["service:order-service", "gc:G1-Old-Generation"]
+    baseline:
+      value: 20
+      noise: 10
+    incident:
+      pattern: gradual_increase
+      value: 2000  # 2 second GC pauses
+      peak_value: 8000
+      noise: 500
+
+  - name: jvm.gc.count
+    type: count
+    tags: ["service:order-service", "gc:G1-Old-Generation"]
+    baseline:
+      value: 1  # per minute
+    incident:
+      pattern: spike
+      value: 50  # Constant GC
+
+  # Service latency (affected by GC pauses)
+  - name: trace.order-service.request.duration
+    type: gauge
+    unit: millisecond
+    tags: ["service:order-service", "env:prod"]
+    baseline:
+      value: 100
+      noise: 30
+    incident:
+      pattern: spike
+      value: 3000
+      peak_value: 10000
+      noise: 1000
+
+  # Error rate
+  - name: trace.order-service.request.errors
+    type: count
+    tags: ["service:order-service", "env:prod"]
+    baseline:
+      value: 1
+    incident:
+      pattern: spike
+      value: 200
+      noise: 50
+
+logs:
+  baseline:
+    - timestamp_offset_minutes: -20
+      service: order-service
+      host: order-service-7b8c9d-abc12
+      status: info
+      message: "Order processed successfully: order-12345"
+
+    - timestamp_offset_minutes: -15
+      service: order-service
+      host: order-service-7b8c9d-def34
+      status: info
+      message: "GC completed: 18ms pause time"
+
+  incident:
+    # GC overhead warnings
+    - timestamp_offset_minutes: 2
+      service: order-service
+      host: order-service-7b8c9d-abc12
+      status: warn
+      message: "GC overhead: 2500ms pause time (G1 Old Generation)"
+      attributes:
+        gc.type: G1-Old-Generation
+        gc.pause_ms: 2500
+        heap.used_bytes: 900000000
+        heap.max_bytes: 1073741824
+
+    - timestamp_offset_minutes: 4
+      service: order-service
+      host: order-service-7b8c9d-abc12
+      status: warn
+      message: "GC overhead limit approaching - spent 85% of time in GC"
+      attributes:
+        gc.overhead_percent: 85
+
+    # First OOM
+    - timestamp_offset_minutes: 5
+      service: order-service
+      host: order-service-7b8c9d-abc12
+      status: error
+      message: "OutOfMemoryError: Java heap space"
+      attributes:
+        error.type: OutOfMemoryError
+        error.message: "Java heap space"
+        error.stack: |
+          java.lang.OutOfMemoryError: Java heap space
+            at java.util.Arrays.copyOf(Arrays.java:3210)
+            at java.util.ArrayList.grow(ArrayList.java:265)
+            at com.example.orders.cache.OrderCache.addOrder(OrderCache.java:45)
+            at com.example.orders.service.OrderService.processOrder(OrderService.java:78)
+
+    # Kubernetes events as logs
+    - timestamp_offset_minutes: 5
+      service: kubernetes
+      host: node-worker-1
+      status: warn
+      message: "Container order-service OOMKilled"
+      attributes:
+        kubernetes.event.reason: OOMKilled
+        kubernetes.event.type: Warning
+        kubernetes.pod.name: order-service-7b8c9d-abc12
+        kubernetes.container.name: order-service
+        kubernetes.container.exit_code: 137
+
+    - timestamp_offset_minutes: 6
+      service: kubernetes
+      host: node-worker-1
+      status: info
+      message: "Pod restarting: order-service-7b8c9d-abc12"
+      attributes:
+        kubernetes.event.reason: Restarting
+        kubernetes.event.type: Normal
+        kubernetes.pod.name: order-service-7b8c9d-abc12
+        restart_count: 1
+
+    # Second pod OOM
+    - timestamp_offset_minutes: 15
+      service: order-service
+      host: order-service-7b8c9d-def34
+      status: error
+      message: "OutOfMemoryError: Java heap space"
+      attributes:
+        error.type: OutOfMemoryError
+
+    - timestamp_offset_minutes: 15
+      service: kubernetes
+      host: node-worker-2
+      status: warn
+      message: "Container order-service OOMKilled"
+      attributes:
+        kubernetes.event.reason: OOMKilled
+        kubernetes.pod.name: order-service-7b8c9d-def34
+        restart_count: 1
+
+    # Back pressure from first pod's second OOM
+    - timestamp_offset_minutes: 20
+      service: order-service
+      host: order-service-7b8c9d-abc12
+      status: error
+      message: "OutOfMemoryError: Java heap space"
+      attributes:
+        error.type: OutOfMemoryError
+
+    - timestamp_offset_minutes: 20
+      service: kubernetes
+      host: node-worker-1
+      status: warn
+      message: "Container order-service OOMKilled (restart count: 2)"
+      attributes:
+        kubernetes.event.reason: OOMKilled
+        restart_count: 2
+
+    # CrashLoopBackOff warning
+    - timestamp_offset_minutes: 25
+      service: kubernetes
+      host: node-worker-1
+      status: warn
+      message: "Pod entering CrashLoopBackOff: order-service-7b8c9d-abc12"
+      attributes:
+        kubernetes.event.reason: BackOff
+        kubernetes.event.type: Warning
+        kubernetes.pod.name: order-service-7b8c9d-abc12
+
+spans:
+  baseline:
+    - trace_id: trace-order-base-001
+      spans:
+        - span_id: span-order-001
+          service: order-service
+          resource: "POST /orders"
+          span_kind: server
+          duration_ns: 100000000  # 100ms
+          is_error: false
+          http.status_code: 201
+
+        - span_id: span-order-001-db
+          service: order-service
+          resource: "INSERT INTO orders"
+          span_kind: client
+          duration_ns: 30000000
+          peer.service: postgres
+
+  incident:
+    # Slow request during GC
+    - trace_id: trace-order-inc-001
+      spans:
+        - span_id: span-order-inc-001
+          service: order-service
+          resource: "POST /orders"
+          span_kind: server
+          duration_ns: 8000000000  # 8 seconds (includes GC pause)
+          is_error: false
+          http.status_code: 201
+
+    # Failed request during OOM
+    - trace_id: trace-order-inc-002
+      spans:
+        - span_id: span-order-inc-002
+          service: order-service
+          resource: "POST /orders"
+          span_kind: server
+          duration_ns: 500000000
+          is_error: true
+          http.status_code: 500
+          error.type: OutOfMemoryError
+
+    # Request to dead pod (connection refused)
+    - trace_id: trace-order-inc-003
+      spans:
+        - span_id: span-order-inc-003
+          service: api-gateway
+          resource: "POST /orders"
+          span_kind: server
+          duration_ns: 100000000
+          is_error: true
+          http.status_code: 502
+
+        - span_id: span-order-inc-003-client
+          service: api-gateway
+          resource: "order-service:8080"
+          span_kind: client
+          duration_ns: 50000000
+          is_error: true
+          peer.service: order-service
+          error.message: "Connection refused"
+
+events:
+  # Deployment event (potential root cause)
+  - id: 2001
+    title: "Deployment: order-service v1.8.0"
+    text: |
+      Deployed order-service with new features.
+      
+      Changes:
+      - Added order caching for performance
+      - New bulk order processing endpoint
+      
+      Note: OrderCache implementation added for faster lookups
+    date_happened_offset_minutes: -120  # 2 hours before (leak is gradual)
+    source: deploy
+    alert_type: info
+    tags:
+      - service:order-service
+      - env:prod
+      - version:1.8.0
+
+  # Alert events
+  - id: 2002
+    title: "Monitor Alert: Order Service Memory Usage > 90%"
+    text: "Memory usage exceeded threshold. Current: 94%"
+    date_happened_offset_minutes: 0
+    source: datadog
+    alert_type: warning
+    tags:
+      - service:order-service
+      - monitor:23456
+
+  # Kubernetes events
+  - id: 2003
+    title: "Kubernetes: Pod OOMKilled"
+    text: "Pod order-service-7b8c9d-abc12 terminated due to OOM"
+    date_happened_offset_minutes: 5
+    source: kubernetes
+    alert_type: error
+    tags:
+      - kube_deployment:order-service
+      - kube_namespace:production
+
+  - id: 2004
+    title: "Kubernetes: Pod CrashLoopBackOff"
+    text: "Pod order-service-7b8c9d-abc12 is in CrashLoopBackOff state"
+    date_happened_offset_minutes: 25
+    source: kubernetes
+    alert_type: error
+    tags:
+      - kube_deployment:order-service
+
+expected_rca:
+  root_cause: "Memory leak in OrderCache causing OOMKilled"
+  contributing_factors:
+    - "Deployment v1.8.0 introduced OrderCache that grows unbounded"
+    - "Memory limit (1GB) reached after ~2 hours of operation"
+    - "No eviction policy for cached orders"
+  recommended_actions:
+    - "Add cache eviction policy (LRU or TTL-based)"
+    - "Increase memory limits temporarily"
+    - "Add memory monitoring and alerting at lower thresholds"
+    - "Consider using external cache (Redis) instead of in-memory"
