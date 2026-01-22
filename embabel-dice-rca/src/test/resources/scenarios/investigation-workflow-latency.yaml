@@ -1,0 +1,568 @@
+# Investigation Workflow: API Latency Alert
+#
+# This scenario simulates a realistic incident investigation where the alert
+# shows a SYMPTOM (high latency) but the ROOT CAUSE must be discovered
+# through systematic investigation.
+#
+# ALERT: "API P95 latency > 500ms" 
+# SYMPTOM: High latency on api-service
+# ROOT CAUSE: (Hidden - must be discovered through investigation)
+#
+# Investigation Flow:
+# 1. Get alert/monitor details → Understand what's alerting
+# 2. Query service metrics → Confirm and scope the problem  
+# 3. Search error logs → Find error patterns
+# 4. Search APM traces → Identify slow dependencies
+# 5. Query dependency metrics → Drill into slow component
+# 6. Get events → Find correlated changes
+# 7. Synthesize findings → Identify root cause
+
+name: investigation-workflow-latency
+description: >
+  API latency alert triggered. The alert only shows the symptom (high latency).
+  Investigation required to find the root cause through systematic drilldown.
+
+# =============================================================================
+# INVESTIGATION STEP 1: Alert/Monitor Details
+# The agent starts here - this is all they know initially
+# =============================================================================
+
+alert:
+  trigger_time: "2026-02-05T14:35:00Z"
+  monitor_id: 12345
+  monitor_name: "API Service P95 Latency"
+  status: "Alert"
+  message: "P95 latency for api-service exceeded 500ms threshold. Current value: 2,450ms"
+  
+  # This is what the agent sees first - just a symptom!
+  initial_context:
+    service: api-service
+    environment: prod
+    metric: "p95:trace.api-service.request.duration"
+    threshold: 500
+    current_value: 2450
+    tags:
+      - "service:api-service"
+      - "env:prod"
+
+timing:
+  incident_start: "2026-02-05T14:30:00Z"
+  baseline_window_minutes: 60  # Look back 1 hour before incident
+  incident_window_minutes: 30
+
+# =============================================================================
+# INVESTIGATION STEP 2: Service Metrics
+# Agent queries metrics to understand the scope and severity
+# =============================================================================
+
+investigation_step_2_metrics:
+  description: "Query service metrics to confirm and understand the problem"
+  
+  queries:
+    # First query: Confirm the latency spike
+    - query: "p95:trace.api-service.request.duration{service:api-service,env:prod}"
+      purpose: "Confirm latency spike"
+      finding: "Latency spiked from ~80ms to 2,450ms at 14:30"
+      
+    # Second query: Check error rate
+    - query: "sum:trace.api-service.request.errors{service:api-service,env:prod}.as_count()"
+      purpose: "Check if errors accompany latency"
+      finding: "Error rate also increased but not dramatically - suggests slowdown not failures"
+      
+    # Third query: Check request volume
+    - query: "sum:trace.api-service.request.hits{service:api-service,env:prod}.as_count()"
+      purpose: "Rule out traffic spike as cause"
+      finding: "Request volume stable - not a traffic spike issue"
+
+metrics:
+  # The symptom metric (what the alert fired on)
+  - name: trace.api-service.request.duration.p95
+    type: gauge
+    unit: millisecond
+    tags: ["service:api-service", "env:prod"]
+    baseline:
+      pattern: normal
+      value: 80
+      noise: 20
+    incident:
+      pattern: spike
+      value: 2450
+      peak_value: 3200
+      noise: 300
+    investigation_note: "SYMPTOM - latency is high, but why?"
+
+  # Error rate - moderate increase
+  - name: trace.api-service.request.errors
+    type: count
+    tags: ["service:api-service", "env:prod"]
+    baseline:
+      value: 5
+      noise: 2
+    incident:
+      value: 45
+      noise: 15
+    investigation_note: "Errors increased but not catastrophic - suggests slowdown causing timeouts"
+
+  # Request volume - stable
+  - name: trace.api-service.request.hits
+    type: count
+    tags: ["service:api-service", "env:prod"]
+    baseline:
+      value: 1000
+      noise: 100
+    incident:
+      value: 1000
+      noise: 100
+    investigation_note: "Traffic stable - rules out traffic spike"
+
+  # CPU/Memory of api-service - normal
+  - name: kubernetes.cpu.usage.total
+    type: gauge
+    unit: millicores
+    tags: ["kube_deployment:api-service", "env:prod"]
+    baseline:
+      value: 300
+      noise: 50
+    incident:
+      value: 350
+      noise: 50
+    investigation_note: "CPU normal - api-service itself is not the bottleneck"
+
+  - name: kubernetes.memory.usage
+    type: gauge
+    unit: byte
+    tags: ["kube_deployment:api-service", "env:prod"]
+    baseline:
+      value: 512000000
+      noise: 50000000
+    incident:
+      value: 530000000
+      noise: 50000000
+    investigation_note: "Memory normal - no memory pressure on api-service"
+
+# =============================================================================
+# INVESTIGATION STEP 3: Error Logs
+# Agent searches logs to find error patterns
+# =============================================================================
+
+investigation_step_3_logs:
+  description: "Search error logs to identify failure patterns"
+  
+  queries:
+    - query: "service:api-service status:error"
+      purpose: "Find error patterns in api-service"
+      finding: "Errors show timeout waiting for inventory-service"
+
+logs:
+  baseline:
+    - timestamp_offset_minutes: -45
+      service: api-service
+      status: info
+      message: "Request completed: GET /products/123 in 75ms"
+      
+    - timestamp_offset_minutes: -30
+      service: api-service
+      status: info
+      message: "Request completed: POST /orders in 120ms"
+
+  incident:
+    # Initial errors - show the symptom (timeout)
+    - timestamp_offset_minutes: 1
+      service: api-service
+      status: error
+      message: "Request timeout waiting for downstream service"
+      attributes:
+        error.type: TimeoutException
+        downstream.service: inventory-service  # CLUE!
+        timeout_ms: 5000
+        request.path: "/products/123"
+      investigation_note: "CLUE: inventory-service is slow"
+
+    - timestamp_offset_minutes: 2
+      service: api-service
+      status: warn
+      message: "Slow response from inventory-service: 4500ms"
+      attributes:
+        downstream.service: inventory-service
+        downstream.latency_ms: 4500
+      investigation_note: "CLUE: Points to inventory-service"
+
+    - timestamp_offset_minutes: 3
+      service: api-service
+      status: error
+      message: "TimeoutException: inventory-service did not respond within 5000ms"
+      attributes:
+        error.type: TimeoutException
+        downstream.service: inventory-service
+        request.path: "/orders"
+
+    - timestamp_offset_minutes: 5
+      service: api-service
+      status: error
+      message: "Circuit breaker OPEN for inventory-service"
+      attributes:
+        circuit.name: inventory-service
+        circuit.state: OPEN
+        circuit.failure_rate: 65
+      investigation_note: "Circuit breaker confirms inventory-service is the problem"
+
+    # Now agent should pivot to investigate inventory-service...
+    
+    # inventory-service logs reveal database issues
+    - timestamp_offset_minutes: 1
+      service: inventory-service
+      status: error
+      message: "Query timeout: SELECT * FROM inventory WHERE product_id = $1"
+      attributes:
+        error.type: QueryTimeoutException
+        db.statement: "SELECT * FROM inventory WHERE product_id = $1"
+        db.timeout_ms: 5000
+      investigation_note: "CLUE: inventory-service has DB query timeout"
+
+    - timestamp_offset_minutes: 2
+      service: inventory-service
+      status: warn
+      message: "Database query slow: 4800ms for inventory lookup"
+      attributes:
+        db.statement: "SELECT * FROM inventory"
+        db.duration_ms: 4800
+        db.host: inventory-db-primary
+
+    - timestamp_offset_minutes: 3
+      service: inventory-service
+      status: error
+      message: "PSQLException: Query cancelled due to timeout"
+      attributes:
+        error.type: PSQLException
+        db.host: inventory-db-primary
+
+    # Database logs reveal the ROOT CAUSE
+    - timestamp_offset_minutes: 0
+      service: postgresql
+      host: inventory-db-primary
+      status: warn
+      message: "Autovacuum running on table 'inventory' - blocking queries"
+      attributes:
+        db.table: inventory
+        db.operation: autovacuum
+        vacuum.phase: "cleaning up indexes"
+      investigation_note: "ROOT CAUSE: Autovacuum blocking queries"
+
+    - timestamp_offset_minutes: 1
+      service: postgresql
+      host: inventory-db-primary
+      status: info
+      message: "Long-running autovacuum: 45 minutes on table 'inventory'"
+      attributes:
+        vacuum.duration_minutes: 45
+        vacuum.table: inventory
+        vacuum.rows_processed: 50000000
+
+    - timestamp_offset_minutes: 5
+      service: postgresql
+      status: warn
+      message: "Table 'inventory' bloat at 60% - autovacuum triggered"
+      attributes:
+        db.table: inventory
+        db.bloat_percent: 60
+        db.dead_tuples: 30000000
+
+# =============================================================================
+# INVESTIGATION STEP 4: APM Traces
+# Agent searches traces to identify slow dependencies
+# =============================================================================
+
+investigation_step_4_traces:
+  description: "Search APM traces to identify slow components in request flow"
+  
+  queries:
+    - query: "service:api-service env:prod"
+      purpose: "Get trace breakdown for api-service requests"
+      finding: "Traces show inventory-service client spans taking 4-5 seconds"
+      
+    - query: "service:inventory-service env:prod"
+      purpose: "Drill into inventory-service"
+      finding: "Database spans (postgres.query) are the slow component"
+
+spans:
+  baseline:
+    - trace_id: trace-base-001
+      spans:
+        - span_id: span-api-001
+          service: api-service
+          resource: "GET /products/{id}"
+          span_kind: server
+          duration_ns: 80000000  # 80ms total
+          is_error: false
+
+        - span_id: span-inv-client-001
+          service: api-service
+          resource: "inventory-service"
+          span_kind: client
+          duration_ns: 50000000  # 50ms
+          peer.service: inventory-service
+
+        - span_id: span-inv-server-001
+          service: inventory-service
+          resource: "GET /inventory/{productId}"
+          span_kind: server
+          duration_ns: 45000000  # 45ms
+
+        - span_id: span-db-001
+          service: inventory-service
+          resource: "SELECT * FROM inventory WHERE product_id = $1"
+          span_kind: client
+          duration_ns: 20000000  # 20ms - normal
+          peer.service: postgres
+          db.type: postgresql
+
+  incident:
+    # Trace showing the full call stack with slowdown
+    - trace_id: trace-inc-001
+      investigation_note: "This trace reveals the cascade: api-service → inventory-service → postgres"
+      spans:
+        # api-service receives request
+        - span_id: span-api-inc-001
+          service: api-service
+          resource: "GET /products/{id}"
+          span_kind: server
+          duration_ns: 4800000000  # 4.8 seconds!
+          is_error: false
+          http.status_code: 200
+
+        # api-service calls inventory-service (slow)
+        - span_id: span-inv-client-inc-001
+          service: api-service
+          resource: "inventory-service"
+          span_kind: client
+          duration_ns: 4700000000  # 4.7 seconds - CLUE!
+          peer.service: inventory-service
+          investigation_note: "CLUE: inventory-service call is slow"
+
+        # inventory-service processes request
+        - span_id: span-inv-server-inc-001
+          service: inventory-service
+          resource: "GET /inventory/{productId}"
+          span_kind: server
+          duration_ns: 4650000000  # 4.65 seconds
+
+        # inventory-service queries database (ROOT CAUSE)
+        - span_id: span-db-inc-001
+          service: inventory-service
+          resource: "SELECT * FROM inventory WHERE product_id = $1"
+          span_kind: client
+          duration_ns: 4600000000  # 4.6 seconds - ROOT CAUSE!
+          peer.service: postgres
+          db.type: postgresql
+          db.statement: "SELECT * FROM inventory WHERE product_id = $1"
+          investigation_note: "ROOT CAUSE: Database query is slow (4.6s vs normal 20ms)"
+
+    # Another trace showing timeout
+    - trace_id: trace-inc-002
+      spans:
+        - span_id: span-api-inc-002
+          service: api-service
+          resource: "GET /products/{id}"
+          span_kind: server
+          duration_ns: 5100000000  # 5.1 seconds - timeout
+          is_error: true
+          http.status_code: 504
+
+        - span_id: span-inv-client-inc-002
+          service: api-service
+          resource: "inventory-service"
+          span_kind: client
+          duration_ns: 5000000000  # 5 second timeout
+          is_error: true
+          peer.service: inventory-service
+          error.type: TimeoutException
+
+# =============================================================================
+# INVESTIGATION STEP 5: Dependency Metrics
+# Agent drills into the slow dependency (inventory-service and its DB)
+# =============================================================================
+
+investigation_step_5_dependency_metrics:
+  description: "Query metrics for inventory-service and its database"
+  
+  queries:
+    - query: "avg:trace.inventory-service.request.duration{service:inventory-service,env:prod}"
+      purpose: "Confirm inventory-service latency"
+      finding: "inventory-service latency spiked from 45ms to 4800ms"
+      
+    - query: "avg:postgresql.queries.time{db:inventory-db}"
+      purpose: "Check database query time"
+      finding: "Database query time spiked - confirms DB is the bottleneck"
+      
+    - query: "avg:postgresql.locks.count{db:inventory-db}"
+      purpose: "Check for lock contention"
+      finding: "High lock count during autovacuum"
+
+  additional_metrics:
+    # inventory-service latency (confirms it's slow)
+    - name: trace.inventory-service.request.duration
+      type: gauge
+      unit: millisecond
+      tags: ["service:inventory-service", "env:prod"]
+      baseline:
+        value: 45
+        noise: 10
+      incident:
+        value: 4800
+        noise: 500
+      investigation_note: "Confirms inventory-service is slow"
+
+    # Database query time (ROOT CAUSE indicator)
+    - name: postgresql.queries.time
+      type: gauge
+      unit: millisecond
+      tags: ["db:inventory-db", "env:prod"]
+      baseline:
+        value: 20
+        noise: 5
+      incident:
+        value: 4600
+        noise: 400
+      investigation_note: "ROOT CAUSE: Database queries extremely slow"
+
+    # Database locks (supports root cause)
+    - name: postgresql.locks.count
+      type: gauge
+      tags: ["db:inventory-db", "lock_type:AccessShareLock"]
+      baseline:
+        value: 10
+        noise: 5
+      incident:
+        value: 500
+        noise: 100
+      investigation_note: "High lock count due to autovacuum"
+
+    # Autovacuum activity (ROOT CAUSE)
+    - name: postgresql.autovacuum.active
+      type: gauge
+      tags: ["db:inventory-db", "table:inventory"]
+      baseline:
+        value: 0
+      incident:
+        value: 1  # Autovacuum running
+      investigation_note: "ROOT CAUSE: Autovacuum is running"
+
+    # Table bloat (explains why autovacuum)
+    - name: postgresql.table.bloat_percent
+      type: gauge
+      tags: ["db:inventory-db", "table:inventory"]
+      baseline:
+        value: 15
+      incident:
+        value: 60  # High bloat
+      investigation_note: "High table bloat triggered autovacuum"
+
+# =============================================================================
+# INVESTIGATION STEP 6: Events
+# Agent checks for correlated changes
+# =============================================================================
+
+investigation_step_6_events:
+  description: "Check for deployments, config changes, or other events"
+  
+  queries:
+    - query: "tags:service:api-service OR tags:service:inventory-service"
+      purpose: "Find related events"
+      finding: "No recent deployments to api-service or inventory-service"
+      
+    - query: "tags:db:inventory-db"
+      purpose: "Check database events"
+      finding: "Large batch delete job ran before incident - caused table bloat"
+
+events:
+  # No deployment to api-service (rules out deployment as cause)
+  # No deployment to inventory-service (rules out deployment)
+  
+  # The actual cause: batch job caused bloat
+  - id: 1001
+    title: "Batch Job: Inventory cleanup completed"
+    text: |
+      Nightly inventory cleanup job completed.
+      Deleted 30 million expired inventory records.
+      Duration: 2 hours
+    date_happened_offset_minutes: -180  # 3 hours before incident
+    source: batch-scheduler
+    alert_type: info
+    tags:
+      - job:inventory-cleanup
+      - db:inventory-db
+    investigation_note: "ROOT CAUSE: This batch delete created 60% table bloat"
+
+  # Autovacuum started
+  - id: 1002
+    title: "PostgreSQL: Autovacuum triggered on inventory table"
+    text: "Autovacuum started due to high dead tuple count"
+    date_happened_offset_minutes: -45  # 45 mins before alert
+    source: postgresql
+    alert_type: info
+    tags:
+      - db:inventory-db
+      - table:inventory
+      - operation:autovacuum
+    investigation_note: "Autovacuum running during peak hours caused the slowdown"
+
+  # Alert fired
+  - id: 1003
+    title: "Alert: api-service P95 latency > 500ms"
+    text: "P95 latency exceeded threshold. Current: 2450ms"
+    date_happened_offset_minutes: 0
+    source: datadog
+    alert_type: error
+    tags:
+      - service:api-service
+      - monitor:12345
+
+# =============================================================================
+# INVESTIGATION SUMMARY
+# =============================================================================
+
+investigation_summary:
+  symptom: "api-service P95 latency at 2450ms (normally 80ms)"
+  
+  investigation_path:
+    - step: 1
+      action: "Get alert details"
+      finding: "api-service latency alert, threshold 500ms, current 2450ms"
+      
+    - step: 2
+      action: "Query api-service metrics"
+      finding: "Latency high, CPU/memory normal, traffic normal → not api-service itself"
+      
+    - step: 3
+      action: "Search api-service logs"
+      finding: "Timeouts waiting for inventory-service → downstream issue"
+      
+    - step: 4
+      action: "Search APM traces"
+      finding: "inventory-service calls taking 4.7s, DB spans taking 4.6s"
+      
+    - step: 5
+      action: "Query inventory-service and DB metrics"
+      finding: "DB query time 4600ms (normal 20ms), autovacuum running"
+      
+    - step: 6
+      action: "Check events"
+      finding: "Batch job deleted 30M rows 3 hours ago, caused bloat, triggered autovacuum"
+
+  root_cause: "PostgreSQL autovacuum on inventory table blocking queries"
+  
+  root_cause_chain:
+    - "Nightly batch job deleted 30 million inventory records"
+    - "Deletion created 60% table bloat (30M dead tuples)"
+    - "Autovacuum triggered during peak hours"
+    - "Autovacuum holds locks that slow down queries"
+    - "inventory-service DB queries blocked/slow (20ms → 4600ms)"
+    - "inventory-service latency increased (45ms → 4800ms)"
+    - "api-service times out waiting for inventory-service"
+    - "api-service latency alert fires (80ms → 2450ms)"
+
+  recommended_actions:
+    - "Immediate: Temporarily pause autovacuum and let it resume during off-peak"
+    - "Short-term: Schedule batch jobs to run with VACUUM afterward"
+    - "Long-term: Configure autovacuum to run more frequently with smaller batches"
+    - "Long-term: Add monitoring for table bloat percentage"

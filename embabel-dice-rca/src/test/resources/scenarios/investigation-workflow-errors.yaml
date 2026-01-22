@@ -1,0 +1,415 @@
+# Investigation Workflow: Error Rate Alert
+#
+# This scenario simulates investigating an error rate spike where the alert
+# shows a SYMPTOM (high errors) but the ROOT CAUSE is hidden.
+#
+# ALERT: "order-service error rate > 5%"
+# SYMPTOM: High error rate on order-service  
+# ROOT CAUSE: (Hidden - must be discovered through investigation)
+#
+# The twist: The error looks like it's in order-service, but it's actually
+# caused by a configuration change in a shared dependency.
+
+name: investigation-workflow-errors
+description: >
+  Error rate alert on order-service. Investigation reveals the errors are
+  caused by a configuration change in a shared authentication service.
+
+alert:
+  trigger_time: "2026-02-06T10:15:00Z"
+  monitor_id: 23456
+  monitor_name: "Order Service Error Rate"
+  status: "Alert"
+  message: "Error rate for order-service exceeded 5% threshold. Current: 23%"
+  
+  initial_context:
+    service: order-service
+    environment: prod
+    metric: "error_rate"
+    threshold: 5
+    current_value: 23
+    tags:
+      - "service:order-service"
+      - "env:prod"
+
+timing:
+  incident_start: "2026-02-06T10:10:00Z"
+  baseline_window_minutes: 60
+  incident_window_minutes: 30
+
+# =============================================================================
+# STEP 1: Initial Alert
+# =============================================================================
+
+monitor:
+  id: 23456
+  name: "Order Service Error Rate"
+  type: metric alert
+  query: "sum:trace.order-service.request.errors{env:prod}.as_count() / sum:trace.order-service.request.hits{env:prod}.as_count() * 100 > 5"
+  message: "Order service error rate above 5%"
+  tags:
+    - service:order-service
+    - env:prod
+    - team:orders
+
+# =============================================================================
+# STEP 2: Service Metrics - Confirm the problem
+# =============================================================================
+
+metrics:
+  # The symptom: high error rate
+  - name: trace.order-service.request.errors
+    type: count
+    tags: ["service:order-service", "env:prod"]
+    baseline:
+      value: 10
+      noise: 5
+    incident:
+      value: 230
+      noise: 30
+    investigation_note: "SYMPTOM: Errors are high, but what type?"
+
+  - name: trace.order-service.request.hits
+    type: count
+    tags: ["service:order-service", "env:prod"]
+    baseline:
+      value: 1000
+    incident:
+      value: 1000
+    investigation_note: "Traffic normal - not a traffic-related issue"
+
+  # Error breakdown by status code
+  - name: http.responses
+    type: count
+    tags: ["service:order-service", "status_code:401"]
+    baseline:
+      value: 5
+    incident:
+      value: 220
+    investigation_note: "CLUE: Most errors are 401 Unauthorized!"
+
+  - name: http.responses
+    type: count
+    tags: ["service:order-service", "status_code:500"]
+    baseline:
+      value: 5
+    incident:
+      value: 10
+    investigation_note: "500s are normal - not internal errors"
+
+  - name: http.responses
+    type: count
+    tags: ["service:order-service", "status_code:200"]
+    baseline:
+      value: 980
+    incident:
+      value: 760
+    investigation_note: "Fewer successes due to 401s"
+
+  # order-service internals look fine
+  - name: kubernetes.cpu.usage.total
+    type: gauge
+    tags: ["kube_deployment:order-service"]
+    baseline:
+      value: 200
+    incident:
+      value: 210
+    investigation_note: "order-service CPU normal"
+
+  - name: jvm.heap.used
+    type: gauge
+    tags: ["service:order-service"]
+    baseline:
+      value: 400000000
+    incident:
+      value: 410000000
+    investigation_note: "order-service memory normal"
+
+  # Auth service metrics (where the problem is)
+  - name: trace.auth-service.request.errors
+    type: count
+    tags: ["service:auth-service", "env:prod"]
+    baseline:
+      value: 5
+    incident:
+      value: 5  # Auth service shows NO errors!
+    investigation_note: "Auth service not showing errors - tricky!"
+
+  - name: trace.auth-service.request.hits
+    type: count
+    tags: ["service:auth-service", "env:prod"]
+    baseline:
+      value: 2000
+    incident:
+      value: 2000
+    investigation_note: "Auth service handling same volume"
+
+  # Token validation metrics (reveals the issue)
+  - name: auth.token.validation.failures
+    type: count
+    tags: ["service:auth-service", "reason:issuer_mismatch"]
+    baseline:
+      value: 0
+    incident:
+      value: 500
+    investigation_note: "CLUE: Token validation failing due to issuer mismatch"
+
+  - name: auth.token.validation.success
+    type: count
+    tags: ["service:auth-service"]
+    baseline:
+      value: 2000
+    incident:
+      value: 1500
+    investigation_note: "25% of token validations failing"
+
+# =============================================================================
+# STEP 3: Error Logs
+# =============================================================================
+
+logs:
+  baseline:
+    - timestamp_offset_minutes: -30
+      service: order-service
+      status: info
+      message: "Order created: ORD-12345"
+
+  incident:
+    # order-service sees 401s
+    - timestamp_offset_minutes: 1
+      service: order-service
+      status: error
+      message: "Authentication failed: 401 Unauthorized"
+      attributes:
+        error.type: AuthenticationException
+        http.status_code: 401
+        auth.error: "Token validation failed"
+      investigation_note: "SYMPTOM: Auth failures"
+
+    - timestamp_offset_minutes: 2
+      service: order-service
+      status: error
+      message: "Request rejected: invalid authentication token"
+      attributes:
+        error.type: AuthenticationException
+        request.path: "/orders"
+        auth.header_present: true
+      investigation_note: "Token present but invalid - not missing auth"
+
+    # Auth service logs show the actual issue
+    - timestamp_offset_minutes: 1
+      service: auth-service
+      status: warn
+      message: "Token validation failed: issuer mismatch"
+      attributes:
+        token.issuer: "https://auth.example.com"
+        expected.issuer: "https://auth-v2.example.com"  # CHANGED!
+        validation.error: "issuer_mismatch"
+      investigation_note: "CLUE: Expected issuer changed!"
+
+    - timestamp_offset_minutes: 2
+      service: auth-service
+      status: warn
+      message: "Token rejected: issuer 'https://auth.example.com' not in allowed list"
+      attributes:
+        token.issuer: "https://auth.example.com"
+        allowed.issuers: ["https://auth-v2.example.com"]
+      investigation_note: "ROOT CAUSE: Allowed issuers list was updated"
+
+    - timestamp_offset_minutes: 3
+      service: auth-service
+      status: info
+      message: "Config loaded: allowed_issuers = ['https://auth-v2.example.com']"
+      attributes:
+        config.key: "allowed_issuers"
+        config.value: ["https://auth-v2.example.com"]
+        config.source: "configmap/auth-service-config"
+      investigation_note: "Config shows only new issuer is allowed"
+
+    # More affected services
+    - timestamp_offset_minutes: 3
+      service: payment-service
+      status: error
+      message: "Authentication failed: 401 Unauthorized"
+      attributes:
+        error.type: AuthenticationException
+      investigation_note: "Other services also affected - confirms shared auth issue"
+
+    - timestamp_offset_minutes: 4
+      service: inventory-service
+      status: error
+      message: "Authentication failed: 401 Unauthorized"
+      attributes:
+        error.type: AuthenticationException
+      investigation_note: "Inventory service also affected"
+
+# =============================================================================
+# STEP 4: APM Traces
+# =============================================================================
+
+spans:
+  baseline:
+    - trace_id: trace-order-base-001
+      spans:
+        - span_id: span-order-001
+          service: order-service
+          resource: "POST /orders"
+          span_kind: server
+          duration_ns: 150000000
+          is_error: false
+          http.status_code: 201
+
+        - span_id: span-auth-001
+          service: order-service
+          resource: "auth-service/validate"
+          span_kind: client
+          duration_ns: 20000000
+          peer.service: auth-service
+          auth.result: "valid"
+
+  incident:
+    # Request failing auth
+    - trace_id: trace-order-inc-001
+      spans:
+        - span_id: span-order-inc-001
+          service: order-service
+          resource: "POST /orders"
+          span_kind: server
+          duration_ns: 50000000  # Fast failure
+          is_error: true
+          http.status_code: 401
+          investigation_note: "Request fails fast with 401"
+
+        - span_id: span-auth-inc-001
+          service: order-service
+          resource: "auth-service/validate"
+          span_kind: client
+          duration_ns: 15000000
+          peer.service: auth-service
+          auth.result: "invalid"
+          auth.error: "issuer_mismatch"
+          investigation_note: "Auth service returns invalid, issuer_mismatch"
+
+        - span_id: span-auth-server-001
+          service: auth-service
+          resource: "POST /validate"
+          span_kind: server
+          duration_ns: 10000000
+          is_error: false  # Auth service didn't error - it correctly rejected!
+          http.status_code: 200
+          auth.token_valid: false
+          auth.rejection_reason: "issuer_mismatch"
+          investigation_note: "Auth service succeeded in rejecting invalid token"
+
+# =============================================================================
+# STEP 5: Events - Find the config change
+# =============================================================================
+
+events:
+  # The root cause: config change
+  - id: 2001
+    title: "Config Update: auth-service-config"
+    text: |
+      Updated authentication configuration for OAuth2 migration.
+      
+      Changed:
+      - allowed_issuers: Added 'https://auth-v2.example.com'
+      - allowed_issuers: Removed 'https://auth.example.com' (OLD - to be decommissioned)
+      
+      Note: Old tokens will fail validation after this change.
+    date_happened_offset_minutes: -5
+    source: kubectl
+    alert_type: info
+    tags:
+      - service:auth-service
+      - config:auth-service-config
+      - type:config_change
+    investigation_note: "ROOT CAUSE: Config change removed old issuer"
+
+  # No other changes
+  - id: 2002
+    title: "Alert: order-service error rate > 5%"
+    text: "Error rate at 23%"
+    date_happened_offset_minutes: 0
+    source: datadog
+    alert_type: error
+    tags:
+      - service:order-service
+
+  # Related alerts (other services affected)
+  - id: 2003
+    title: "Alert: payment-service error rate elevated"
+    text: "Error rate at 18%"
+    date_happened_offset_minutes: 2
+    source: datadog
+    alert_type: warning
+    tags:
+      - service:payment-service
+
+  - id: 2004
+    title: "Alert: inventory-service error rate elevated"
+    text: "Error rate at 15%"
+    date_happened_offset_minutes: 3
+    source: datadog
+    alert_type: warning
+    tags:
+      - service:inventory-service
+
+# =============================================================================
+# INVESTIGATION SUMMARY
+# =============================================================================
+
+investigation_summary:
+  symptom: "order-service error rate at 23% (normally <1%)"
+  
+  investigation_path:
+    - step: 1
+      action: "Get alert details"
+      finding: "order-service error rate 23%, threshold 5%"
+      
+    - step: 2
+      action: "Query order-service metrics"
+      finding: "Errors are mostly 401s (not 500s) - authentication issue"
+      
+    - step: 3
+      action: "Search order-service logs"
+      finding: "Auth failures with 'token validation failed'"
+      
+    - step: 4
+      action: "Search auth-service logs"
+      finding: "'issuer_mismatch' - expected issuer changed!"
+      
+    - step: 5
+      action: "Check auth-service metrics"
+      finding: "token.validation.failures with reason:issuer_mismatch spiking"
+      
+    - step: 6
+      action: "Check events"
+      finding: "Config change 5 mins ago removed old issuer from allowed list"
+      
+    - step: 7
+      action: "Verify other services"
+      finding: "payment-service and inventory-service also seeing 401s"
+
+  root_cause: "Auth service config change removed old OAuth issuer from allowed list"
+  
+  root_cause_chain:
+    - "Config update to auth-service-config at 10:05"
+    - "Old issuer 'https://auth.example.com' removed from allowed_issuers"
+    - "Existing tokens still reference old issuer"
+    - "Auth service correctly rejects tokens with unknown issuer"
+    - "All services using auth-service start getting 401s"
+    - "order-service error rate spikes (along with payment, inventory)"
+    - "Alert fires on order-service (first to hit threshold)"
+
+  why_tricky:
+    - "order-service is blamed but it's not the source"
+    - "auth-service shows NO errors (it's working correctly)"
+    - "Root cause is a config change, not a deployment"
+    - "Multiple services affected but only one alert (so far)"
+
+  recommended_actions:
+    - "Immediate: Add old issuer back to allowed_issuers"
+    - "Short-term: Implement gradual OAuth migration with both issuers"
+    - "Long-term: Set up token refresh to use new issuer"
+    - "Process: Config changes should trigger canary/gradual rollout"

@@ -1,0 +1,433 @@
+# Investigation Workflow: Intermittent Failures
+#
+# This scenario simulates a tricky investigation where failures are INTERMITTENT.
+# Some requests succeed, some fail - making it harder to identify the pattern.
+#
+# ALERT: "checkout-service error rate > 2%"
+# SYMPTOM: Intermittent 503 errors (not all requests failing)
+# ROOT CAUSE: (Hidden - pattern must be discovered)
+#
+# The twist: Only requests to specific pods fail due to a Kubernetes issue.
+
+name: investigation-workflow-intermittent
+description: >
+  Intermittent 503 errors on checkout-service. Some requests succeed, some fail.
+  Investigation reveals only 2 of 5 pods are affected due to node-level DNS issue.
+
+alert:
+  trigger_time: "2026-02-07T16:45:00Z"
+  monitor_id: 34567
+  monitor_name: "Checkout Service Error Rate"
+  status: "Alert"
+  message: "Error rate for checkout-service at 8%. Intermittent 503 errors detected."
+  
+  initial_context:
+    service: checkout-service
+    environment: prod
+    error_pattern: "intermittent"
+    affected_percentage: 40
+    tags:
+      - "service:checkout-service"
+      - "env:prod"
+
+timing:
+  incident_start: "2026-02-07T16:30:00Z"
+  baseline_window_minutes: 60
+  incident_window_minutes: 30
+
+monitor:
+  id: 34567
+  name: "Checkout Service Error Rate"
+  type: metric alert
+  query: "sum:trace.checkout-service.request.errors{env:prod}.as_count() / sum:trace.checkout-service.request.hits{env:prod}.as_count() * 100 > 2"
+  tags:
+    - service:checkout-service
+    - env:prod
+
+# =============================================================================
+# METRICS - Show intermittent pattern
+# =============================================================================
+
+metrics:
+  # Overall error rate - moderate (not 100%)
+  - name: trace.checkout-service.request.errors
+    type: count
+    tags: ["service:checkout-service", "env:prod"]
+    baseline:
+      value: 5
+      noise: 2
+    incident:
+      value: 80  # ~8% of 1000 requests
+      noise: 20
+    investigation_note: "Only ~8% failing - not total outage"
+
+  - name: trace.checkout-service.request.hits
+    type: count
+    tags: ["service:checkout-service", "env:prod"]
+    baseline:
+      value: 1000
+    incident:
+      value: 1000
+
+  # Error breakdown BY POD - reveals pattern
+  - name: trace.checkout-service.request.errors
+    type: count
+    tags: ["service:checkout-service", "pod:checkout-abc11"]
+    baseline:
+      value: 1
+    incident:
+      value: 1  # This pod is FINE
+    investigation_note: "Pod abc11 on node-1: healthy"
+
+  - name: trace.checkout-service.request.errors
+    type: count
+    tags: ["service:checkout-service", "pod:checkout-abc22"]
+    baseline:
+      value: 1
+    incident:
+      value: 1  # This pod is FINE
+    investigation_note: "Pod abc22 on node-1: healthy"
+
+  - name: trace.checkout-service.request.errors
+    type: count
+    tags: ["service:checkout-service", "pod:checkout-def33"]
+    baseline:
+      value: 1
+    incident:
+      value: 1  # This pod is FINE
+    investigation_note: "Pod def33 on node-2: healthy"
+
+  - name: trace.checkout-service.request.errors
+    type: count
+    tags: ["service:checkout-service", "pod:checkout-ghi44"]
+    baseline:
+      value: 1
+    incident:
+      value: 38  # THIS POD IS FAILING!
+    investigation_note: "CLUE: Pod ghi44 on node-3 is failing!"
+
+  - name: trace.checkout-service.request.errors
+    type: count
+    tags: ["service:checkout-service", "pod:checkout-ghi55"]
+    baseline:
+      value: 1
+    incident:
+      value: 38  # THIS POD IS ALSO FAILING!
+    investigation_note: "CLUE: Pod ghi55 on node-3 is also failing!"
+
+  # Node-level metrics - node-3 has issues
+  - name: dns.lookup.errors
+    type: count
+    tags: ["host:worker-node-3"]
+    baseline:
+      value: 0
+    incident:
+      value: 200
+    investigation_note: "ROOT CAUSE: node-3 has DNS issues"
+
+  - name: dns.lookup.errors
+    type: count
+    tags: ["host:worker-node-1"]
+    baseline:
+      value: 0
+    incident:
+      value: 0
+    investigation_note: "node-1 DNS working fine"
+
+  - name: dns.lookup.errors
+    type: count
+    tags: ["host:worker-node-2"]
+    baseline:
+      value: 0
+    incident:
+      value: 0
+    investigation_note: "node-2 DNS working fine"
+
+  # NodeLocal DNSCache status
+  - name: kubernetes.pod.status
+    type: gauge
+    tags: ["kube_daemonset:node-local-dns", "host:worker-node-3"]
+    baseline:
+      value: 1  # Running
+    incident:
+      value: 0  # Not running!
+    investigation_note: "ROOT CAUSE: NodeLocal DNSCache not running on node-3"
+
+  - name: kubernetes.pod.status
+    type: gauge
+    tags: ["kube_daemonset:node-local-dns", "host:worker-node-1"]
+    baseline:
+      value: 1
+    incident:
+      value: 1  # Still running
+
+# =============================================================================
+# LOGS - Show pod-specific failures
+# =============================================================================
+
+logs:
+  baseline:
+    - timestamp_offset_minutes: -30
+      service: checkout-service
+      status: info
+      message: "Checkout completed: order-12345"
+
+  incident:
+    # Successful request (from healthy pod)
+    - timestamp_offset_minutes: 1
+      service: checkout-service
+      host: checkout-abc11
+      status: info
+      message: "Checkout completed successfully"
+      attributes:
+        kubernetes.pod.name: checkout-abc11
+        kubernetes.node.name: worker-node-1
+
+    # Failed request (from unhealthy pod)
+    - timestamp_offset_minutes: 1
+      service: checkout-service
+      host: checkout-ghi44
+      status: error
+      message: "Failed to connect to payment-service: Name resolution failed"
+      attributes:
+        error.type: UnknownHostException
+        error.message: "payment-service.production.svc.cluster.local: Name does not resolve"
+        kubernetes.pod.name: checkout-ghi44
+        kubernetes.node.name: worker-node-3
+      investigation_note: "CLUE: DNS resolution failing on this pod"
+
+    - timestamp_offset_minutes: 2
+      service: checkout-service
+      host: checkout-ghi55
+      status: error
+      message: "DNS lookup failed for inventory-service"
+      attributes:
+        error.type: UnknownHostException
+        dns.query: "inventory-service.production.svc.cluster.local"
+        kubernetes.pod.name: checkout-ghi55
+        kubernetes.node.name: worker-node-3
+      investigation_note: "Another pod on node-3 also failing DNS"
+
+    # Successful from different node
+    - timestamp_offset_minutes: 2
+      service: checkout-service
+      host: checkout-def33
+      status: info
+      message: "Payment processed successfully"
+      attributes:
+        kubernetes.pod.name: checkout-def33
+        kubernetes.node.name: worker-node-2
+
+    # Node-level DNS issue
+    - timestamp_offset_minutes: 3
+      service: node-local-dns
+      host: worker-node-3
+      status: error
+      message: "NodeLocal DNSCache crashed: OOM"
+      attributes:
+        kubernetes.event.reason: OOMKilled
+        kubernetes.pod.name: node-local-dns-abc99
+        kubernetes.node.name: worker-node-3
+      investigation_note: "ROOT CAUSE: NodeLocal DNS cache OOM on node-3"
+
+    - timestamp_offset_minutes: 5
+      service: kubernetes
+      host: worker-node-3
+      status: warn
+      message: "DaemonSet pod node-local-dns not running on node"
+      attributes:
+        kubernetes.event.reason: DaemonSetPodMissing
+        kubernetes.node.name: worker-node-3
+
+    # Pattern confirmation
+    - timestamp_offset_minutes: 10
+      service: checkout-service
+      status: warn
+      message: "Error pattern detected: failures correlate with node-3"
+      attributes:
+        error.node_correlation: worker-node-3
+        affected_pods: ["checkout-ghi44", "checkout-ghi55"]
+
+# =============================================================================
+# SPANS - Show success/failure pattern
+# =============================================================================
+
+spans:
+  baseline:
+    - trace_id: trace-checkout-base-001
+      spans:
+        - span_id: span-checkout-001
+          service: checkout-service
+          resource: "POST /checkout"
+          span_kind: server
+          duration_ns: 500000000
+          is_error: false
+
+        - span_id: span-payment-001
+          service: checkout-service
+          resource: "payment-service"
+          span_kind: client
+          duration_ns: 200000000
+          peer.service: payment-service
+
+  incident:
+    # Successful request (pod on node-1)
+    - trace_id: trace-checkout-inc-001
+      spans:
+        - span_id: span-checkout-ok-001
+          service: checkout-service
+          resource: "POST /checkout"
+          span_kind: server
+          duration_ns: 500000000
+          is_error: false
+          kubernetes.pod.name: checkout-abc11
+          kubernetes.node.name: worker-node-1
+
+        - span_id: span-payment-ok-001
+          service: checkout-service
+          resource: "payment-service"
+          span_kind: client
+          duration_ns: 200000000
+          peer.service: payment-service
+
+    # Failed request (pod on node-3)
+    - trace_id: trace-checkout-inc-002
+      spans:
+        - span_id: span-checkout-fail-001
+          service: checkout-service
+          resource: "POST /checkout"
+          span_kind: server
+          duration_ns: 5100000000
+          is_error: true
+          http.status_code: 503
+          kubernetes.pod.name: checkout-ghi44
+          kubernetes.node.name: worker-node-3
+          investigation_note: "Request to pod on node-3 fails"
+
+        - span_id: span-payment-fail-001
+          service: checkout-service
+          resource: "payment-service"
+          span_kind: client
+          duration_ns: 5000000000
+          is_error: true
+          peer.service: payment-service
+          error.type: UnknownHostException
+          error.message: "DNS resolution failed"
+          investigation_note: "DNS resolution failing"
+
+    # Another failed request (same node)
+    - trace_id: trace-checkout-inc-003
+      spans:
+        - span_id: span-checkout-fail-002
+          service: checkout-service
+          resource: "POST /checkout"
+          span_kind: server
+          duration_ns: 100000000
+          is_error: true
+          http.status_code: 503
+          kubernetes.pod.name: checkout-ghi55
+          kubernetes.node.name: worker-node-3
+          investigation_note: "Different pod, same node - pattern confirmed"
+
+# =============================================================================
+# EVENTS
+# =============================================================================
+
+events:
+  # NodeLocal DNS OOM (root cause event)
+  - id: 3001
+    title: "Kubernetes: node-local-dns OOMKilled on worker-node-3"
+    text: "NodeLocal DNSCache pod terminated due to OOM"
+    date_happened_offset_minutes: -15
+    source: kubernetes
+    alert_type: error
+    tags:
+      - kube_daemonset:node-local-dns
+      - kubernetes.node:worker-node-3
+      - kubernetes.event.reason:OOMKilled
+    investigation_note: "ROOT CAUSE: DNS cache OOM"
+
+  # Memory pressure on node
+  - id: 3002
+    title: "Kubernetes: worker-node-3 memory pressure"
+    text: "Node experiencing memory pressure, some pods affected"
+    date_happened_offset_minutes: -20
+    source: kubernetes
+    alert_type: warning
+    tags:
+      - kubernetes.node:worker-node-3
+      - kubernetes.condition:MemoryPressure
+
+  # Alert
+  - id: 3003
+    title: "Alert: checkout-service error rate > 2%"
+    text: "Intermittent 503 errors detected"
+    date_happened_offset_minutes: 0
+    source: datadog
+    alert_type: error
+    tags:
+      - service:checkout-service
+
+# =============================================================================
+# INVESTIGATION SUMMARY
+# =============================================================================
+
+investigation_summary:
+  symptom: "checkout-service intermittent 503 errors (~8% error rate)"
+  
+  key_observation: "Not all requests failing - some succeed, some fail"
+  
+  investigation_path:
+    - step: 1
+      action: "Get alert details"
+      finding: "8% error rate, intermittent pattern"
+      question: "Why only some requests? What's different about failures?"
+      
+    - step: 2
+      action: "Query metrics broken down by pod"
+      finding: "Only 2 pods have high errors: checkout-ghi44 and checkout-ghi55"
+      question: "What do these pods have in common?"
+      
+    - step: 3
+      action: "Check pod details"
+      finding: "Both failing pods are on worker-node-3"
+      question: "Is there a node-level issue?"
+      
+    - step: 4
+      action: "Search logs filtered by failing pods"
+      finding: "DNS resolution errors: 'Name does not resolve'"
+      question: "Why is DNS failing only on node-3?"
+      
+    - step: 5
+      action: "Query DNS metrics by node"
+      finding: "dns.lookup.errors high only on worker-node-3"
+      question: "What provides DNS on node-3?"
+      
+    - step: 6
+      action: "Check node-local-dns daemonset"
+      finding: "node-local-dns pod OOMKilled on node-3, not running"
+      root_cause_found: true
+
+  root_cause: "NodeLocal DNSCache OOMKilled on worker-node-3"
+  
+  root_cause_chain:
+    - "Memory pressure on worker-node-3"
+    - "node-local-dns pod OOMKilled"
+    - "Pods on node-3 lose local DNS cache"
+    - "DNS queries fail (no fallback configured properly)"
+    - "Service discovery fails for pods on node-3"
+    - "checkout-ghi44 and checkout-ghi55 can't reach payment-service"
+    - "40% of traffic (2/5 pods) returns 503"
+
+  why_intermittent:
+    - "Only 2 of 5 pods affected (pods on node-3)"
+    - "Load balancer round-robins to all pods"
+    - "Requests to healthy pods succeed (60%)"
+    - "Requests to unhealthy pods fail (40%)"
+    - "User experience: sometimes works, sometimes doesn't"
+
+  recommended_actions:
+    - "Immediate: Restart node-local-dns on node-3 or cordon the node"
+    - "Short-term: Increase node-local-dns memory limits"
+    - "Long-term: Configure DNS fallback to CoreDNS"
+    - "Long-term: Add node-level resource monitoring alerts"
