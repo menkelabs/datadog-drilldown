@@ -1,0 +1,400 @@
+# Scenario: Database Connection Pool Exhaustion
+# 
+# Root Cause: A deployment introduced a query that holds connections too long,
+# causing the HikariCP connection pool to become exhausted.
+#
+# This scenario simulates a typical database connection pool saturation incident.
+
+name: database-pool-exhaustion
+description: >
+  High latency caused by database connection pool exhaustion following a deployment.
+  A new query pattern holds connections longer than expected, saturating the pool.
+
+# Timing configuration
+timing:
+  incident_start: "2026-01-15T12:00:00Z"
+  baseline_window_minutes: 30
+  incident_window_minutes: 30
+
+# Affected scope
+scope:
+  service: api
+  environment: prod
+  hosts:
+    - api-host-1
+    - api-host-2
+    - api-host-3
+
+# Monitor that triggered the alert
+monitor:
+  id: 12345
+  name: "API P95 Latency Alert"
+  type: metric alert
+  query: "avg(last_5m):p95:trace.api.request.duration{service:api,env:prod} > 500"
+  message: "API latency is above threshold. Check database connections and recent deployments."
+  tags:
+    - service:api
+    - env:prod
+    - team:platform
+  state:
+    overall_state: Alert
+    groups:
+      "service:api,env:prod":
+        status: Alert
+        last_triggered_ts: 1705320300  # 12:05:00
+
+# Metrics to mock
+metrics:
+  # Service latency - the symptom
+  - name: trace.api.request.duration
+    type: gauge
+    unit: millisecond
+    tags: ["service:api", "env:prod"]
+    baseline:
+      pattern: normal
+      value: 50
+      noise: 10
+    incident:
+      pattern: spike
+      value: 500
+      peak_value: 5200
+      noise: 100
+
+  # Error rate
+  - name: trace.api.request.errors
+    type: count
+    tags: ["service:api", "env:prod"]
+    baseline:
+      pattern: normal
+      value: 2
+      noise: 1
+    incident:
+      pattern: gradual_increase
+      value: 150
+      noise: 30
+
+  # Connection pool - active connections (ROOT CAUSE INDICATOR)
+  - name: jvm.db.pool.active
+    type: gauge
+    unit: connection
+    tags: ["service:api", "pool:HikariPool-1"]
+    baseline:
+      pattern: normal
+      value: 20
+      noise: 5
+    incident:
+      pattern: step_change
+      value: 100  # maxPoolSize = 100
+      noise: 0    # saturated
+
+  # Connection pool - pending requests
+  - name: jvm.db.pool.pending
+    type: gauge
+    unit: request
+    tags: ["service:api", "pool:HikariPool-1"]
+    baseline:
+      pattern: normal
+      value: 0
+      noise: 0
+    incident:
+      pattern: gradual_increase
+      value: 75
+      noise: 20
+
+  # Connection pool - timeouts
+  - name: jvm.db.pool.timeout
+    type: count
+    tags: ["service:api", "pool:HikariPool-1"]
+    baseline:
+      pattern: normal
+      value: 0
+    incident:
+      pattern: spike
+      value: 200
+      noise: 50
+
+  # PostgreSQL metrics
+  - name: postgresql.connections.active
+    type: gauge
+    tags: ["db:primary", "env:prod"]
+    baseline:
+      value: 40
+      noise: 10
+    incident:
+      value: 150
+      noise: 5
+
+  - name: postgresql.connections.waiting
+    type: gauge
+    tags: ["db:primary", "env:prod"]
+    baseline:
+      value: 0
+    incident:
+      value: 25
+      noise: 10
+
+  # JVM metrics
+  - name: jvm.heap.used
+    type: gauge
+    unit: byte
+    tags: ["service:api", "env:prod"]
+    baseline:
+      value: 500000000  # 500MB
+      noise: 50000000
+    incident:
+      value: 700000000  # 700MB (higher due to queued requests)
+      noise: 30000000
+
+  - name: jvm.gc.pause_time
+    type: gauge
+    unit: millisecond
+    tags: ["service:api", "env:prod"]
+    baseline:
+      value: 15
+      noise: 5
+    incident:
+      value: 50
+      noise: 20
+
+# Logs to mock
+logs:
+  baseline:
+    - timestamp_offset_minutes: -25
+      service: api
+      host: api-host-1
+      status: info
+      message: "Request completed successfully"
+      
+    - timestamp_offset_minutes: -20
+      service: api
+      host: api-host-2
+      status: info
+      message: "Health check passed"
+
+  incident:
+    # Main error pattern - connection pool exhaustion
+    - timestamp_offset_minutes: 1
+      service: api
+      host: api-host-1
+      status: error
+      message: "TimeoutError: Connection pool exhausted after 5000ms"
+      attributes:
+        error.type: TimeoutError
+        error.message: "Connection pool exhausted"
+        pool.name: HikariPool-1
+        pool.active: 100
+        pool.max: 100
+        
+    - timestamp_offset_minutes: 2
+      service: api
+      host: api-host-2
+      status: error
+      message: "TimeoutError: Connection pool exhausted after 5000ms"
+      attributes:
+        error.type: TimeoutError
+        error.message: "Connection pool exhausted"
+        pool.name: HikariPool-1
+        
+    - timestamp_offset_minutes: 3
+      service: api
+      host: api-host-1
+      status: error
+      message: "SQLException: Unable to acquire connection from pool"
+      attributes:
+        error.type: SQLException
+        error.message: "Unable to acquire connection"
+        error.stack: |
+          java.sql.SQLException: Unable to acquire connection
+            at com.zaxxer.hikari.pool.HikariPool.getConnection(HikariPool.java:251)
+            at com.example.api.repository.UserRepository.findById(UserRepository.java:45)
+            at com.example.api.service.UserService.getUser(UserService.java:32)
+            
+    - timestamp_offset_minutes: 4
+      service: api
+      host: api-host-1
+      status: warn
+      message: "Connection pool nearing capacity: 95/100 active connections"
+      attributes:
+        pool.name: HikariPool-1
+        pool.active: 95
+        pool.pending: 50
+        
+    - timestamp_offset_minutes: 5
+      service: api
+      host: api-host-3
+      status: error
+      message: "TimeoutError: Connection pool exhausted after 5000ms"
+      attributes:
+        error.type: TimeoutError
+        
+    # HikariCP internal warning
+    - timestamp_offset_minutes: 6
+      service: api
+      host: api-host-1
+      status: warn
+      message: "HikariPool-1 - Connection is not available, request timed out after 5000ms"
+      attributes:
+        pool.name: HikariPool-1
+        timeout_ms: 5000
+        
+    - timestamp_offset_minutes: 10
+      service: api
+      host: api-host-2
+      status: error
+      message: "TimeoutError: Connection pool exhausted after 5000ms"
+      attributes:
+        error.type: TimeoutError
+        
+    - timestamp_offset_minutes: 15
+      service: api
+      host: api-host-1
+      status: error
+      message: "SQLException: Unable to acquire connection from pool"
+      attributes:
+        error.type: SQLException
+
+# APM Spans to mock
+spans:
+  baseline:
+    # Normal request with fast DB query
+    - trace_id: trace-baseline-001
+      spans:
+        - span_id: span-001-server
+          service: api
+          resource: "GET /users/{id}"
+          name: users.get
+          span_kind: server
+          duration_ns: 50000000  # 50ms
+          is_error: false
+          http.status_code: 200
+          http.method: GET
+          
+        - span_id: span-001-db
+          service: api
+          resource: "SELECT * FROM users WHERE id = ?"
+          name: postgres.query
+          span_kind: client
+          duration_ns: 20000000  # 20ms
+          is_error: false
+          peer.service: postgres
+          db.type: postgresql
+          db.statement: "SELECT * FROM users WHERE id = $1"
+
+  incident:
+    # Slow request with DB timeout
+    - trace_id: trace-incident-001
+      spans:
+        - span_id: span-inc-001-server
+          service: api
+          resource: "GET /users/{id}"
+          name: users.get
+          span_kind: server
+          duration_ns: 5100000000  # 5.1 seconds
+          is_error: true
+          http.status_code: 504
+          http.method: GET
+          error.type: TimeoutError
+          
+        - span_id: span-inc-001-db
+          service: api
+          resource: "SELECT * FROM users WHERE id = ?"
+          name: postgres.query
+          span_kind: client
+          duration_ns: 5000000000  # 5 seconds (timeout)
+          is_error: true
+          peer.service: postgres
+          db.type: postgresql
+          error.message: "Connection pool exhausted"
+
+    # Another slow request
+    - trace_id: trace-incident-002
+      spans:
+        - span_id: span-inc-002-server
+          service: api
+          resource: "POST /orders"
+          name: orders.create
+          span_kind: server
+          duration_ns: 5200000000  # 5.2 seconds
+          is_error: true
+          http.status_code: 504
+          
+        - span_id: span-inc-002-db
+          service: api
+          resource: "INSERT INTO orders (...)"
+          name: postgres.query
+          span_kind: client
+          duration_ns: 5000000000
+          is_error: true
+          peer.service: postgres
+          error.message: "Connection acquisition timeout"
+
+    # Request that succeeded but was slow
+    - trace_id: trace-incident-003
+      spans:
+        - span_id: span-inc-003-server
+          service: api
+          resource: "GET /products"
+          name: products.list
+          span_kind: server
+          duration_ns: 4800000000  # 4.8 seconds (just under timeout)
+          is_error: false
+          http.status_code: 200
+          
+        - span_id: span-inc-003-db
+          service: api
+          resource: "SELECT * FROM products LIMIT 100"
+          name: postgres.query
+          span_kind: client
+          duration_ns: 4500000000  # 4.5 seconds
+          is_error: false
+          peer.service: postgres
+
+# Events to mock
+events:
+  # Deployment event - THE ROOT CAUSE
+  - id: 1001
+    title: "Deployment: api-service v2.1.0"
+    text: |
+      Deployed new version of api-service.
+      
+      Changes:
+      - Added new user search feature
+      - Updated database query patterns
+      - Increased request timeout to 30s
+      
+      Commit: abc123def
+      Author: developer@example.com
+    date_happened_offset_minutes: -5  # 5 minutes before incident
+    source: deploy
+    alert_type: info
+    tags:
+      - service:api
+      - env:prod
+      - version:2.1.0
+      - deploy
+      - team:platform
+
+  # Config change (related)
+  - id: 1002
+    title: "Config Update: api-service"
+    text: "Updated database connection timeout from 10s to 30s"
+    date_happened_offset_minutes: -5
+    source: consul
+    alert_type: info
+    tags:
+      - service:api
+      - env:prod
+      - config
+
+# Expected root cause analysis
+expected_rca:
+  root_cause: "Database connection pool exhaustion"
+  contributing_factors:
+    - "Deployment v2.1.0 introduced query patterns that hold connections longer"
+    - "Connection timeout increased from 10s to 30s"
+    - "Pool size (100) insufficient for new query patterns"
+  recommended_actions:
+    - "Rollback to v2.0.x or fix the slow queries"
+    - "Increase connection pool size"
+    - "Add query timeout limits"
+    - "Review new query patterns for efficiency"
