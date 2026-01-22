@@ -352,236 +352,163 @@ data class TimeSeriesConfig(
 
 ## Detailed Mock Scenarios
 
-### Scenario 1: Database Connection Pool Exhaustion
+We have created **21 comprehensive YAML scenario files** located in `src/test/resources/scenarios/`. Each scenario includes complete mock data for metrics, logs, spans, and events.
 
-**Symptoms:**
-- API latency spike (50ms → 5000ms)
-- Timeout errors in logs
-- DB connection pool at max capacity
+### Scenario Catalog
 
-**Mock Data:**
+| # | Scenario File | Category | Root Cause |
+|---|--------------|----------|------------|
+| 1 | `database-pool-exhaustion.yaml` | Database | HikariCP pool saturation after deployment |
+| 2 | `kubernetes-oom.yaml` | Kubernetes | Memory leak causing pod OOMKilled |
+| 3 | `downstream-service-failure.yaml` | Service | Cascading failure with circuit breaker |
+| 4 | `redis-cache-failure.yaml` | Cache | Cache unavailable, DB fallback overload |
+| 5 | `kubernetes-node-pressure.yaml` | Kubernetes | Node memory pressure, pod evictions |
+| 6 | `database-deadlock.yaml` | Database | Concurrent transactions causing deadlocks |
+| 7 | `kafka-consumer-lag.yaml` | Messaging | N+1 queries causing consumer lag |
+| 8 | `cpu-throttling.yaml` | Kubernetes | Container CPU limits during traffic spike |
+| 9 | `dns-resolution-failure.yaml` | Network | CoreDNS overwhelmed by query spike |
+| 10 | `ssl-certificate-expiry.yaml` | Security | Expired TLS certificate |
+| 11 | `rate-limiting.yaml` | Traffic | Abusive client consuming shared quota |
+| 12 | `disk-io-saturation.yaml` | Storage | Backup job saturating disk I/O |
+| 13 | `network-partition.yaml` | Network | AZ isolation causing split-brain |
+| 14 | `gc-storm.yaml` | JVM | Large object allocation triggering Full GC |
+| 15 | `third-party-api-degradation.yaml` | External | Stripe API degradation |
+| 16 | `thread-pool-exhaustion.yaml` | Application | Blocking calls exhausting thread pool |
+| 17 | `elasticsearch-cluster-issue.yaml` | Search | Data node failure, unassigned shards |
+| 18 | `config-drift.yaml` | Operations | ConfigMap update not propagated to pods |
+| 19 | `envoy-sidecar-failure.yaml` | Service Mesh | Envoy proxy OOM causing mesh failures |
+| 20 | `secret-rotation-failure.yaml` | Security | DB credentials rotated but pods not restarted |
+| 21 | (more can be added) | - | - |
 
-```yaml
-metrics:
-  jvm.db.pool.active:
-    baseline: 20 (of 100)
-    incident: 100 (saturated)
-  jvm.db.pool.pending:
-    baseline: 0
-    incident: 50+ (queued requests)
-  jvm.db.pool.timeout:
-    baseline: 0
-    incident: 200+ (timeouts)
-  trace.api.request.duration:
-    baseline: 50ms
-    incident: 5000ms (timeout)
-  postgresql.connections.active:
-    baseline: 20
-    incident: 100
+### Scenario Structure
 
-logs:
-  - TimeoutError: Connection pool exhausted after 5000ms
-  - SQLException: Unable to acquire connection from pool
-  - HikariPool: Connection not available, request timed out
-
-spans:
-  - server span: GET /users, 5000ms, error=true
-  - client span: postgres.query, timeout, error=true, peer.service=postgres
-
-events:
-  - Deployment: api-service v2.1.0 (5 mins before incident)
-```
-
-### Scenario 2: Kubernetes Pod OOMKilled
-
-**Symptoms:**
-- Service errors during OOM events
-- Container restarts
-- Memory usage spike
-
-**Mock Data:**
+Each YAML scenario file follows this structure:
 
 ```yaml
+name: scenario-name
+description: Detailed description of the incident
+
+timing:
+  incident_start: "2026-01-15T12:00:00Z"
+  baseline_window_minutes: 30
+  incident_window_minutes: 30
+
+scope:
+  service: affected-service
+  environment: prod
+  # Additional scope details
+
+monitor:
+  id: 12345
+  name: "Monitor Name"
+  type: metric alert
+  query: "datadog query"
+  tags: [...]
+
 metrics:
-  kubernetes.memory.usage:
-    baseline: 500MB (of 1GB limit)
-    incident: 1024MB (at limit)
-  kubernetes.containers.restarts:
-    baseline: 0
-    incident: 3+
-  jvm.heap.used:
-    baseline: 400MB
-    incident: 950MB (near max)
-  jvm.gc.pause_time:
-    baseline: 15ms
-    incident: 5000ms (long GC pauses)
+  - name: metric.name
+    type: gauge|count
+    tags: [...]
+    baseline:
+      value: X
+      noise: Y
+    incident:
+      pattern: normal|spike|gradual_increase|step_change
+      value: X
+      noise: Y
 
 logs:
-  - OutOfMemoryError: Java heap space
-  - GC overhead limit exceeded
-  - kubernetes event: OOMKilled
-  - kubernetes event: Container restarting
+  baseline: [...]
+  incident:
+    - timestamp_offset_minutes: N
+      service: service-name
+      status: error|warn|info
+      message: "Log message"
+      attributes:
+        error.type: ExceptionType
+        # ...
 
 spans:
-  - server span: intermittent errors during restart windows
-  - gaps in spans during container restarts
+  baseline:
+    - trace_id: trace-xxx
+      spans:
+        - span_id: span-xxx
+          service: service
+          resource: "endpoint"
+          span_kind: server|client
+          duration_ns: N
+          is_error: false|true
+          # ...
+  incident: [...]
 
 events:
-  - kubernetes: Pod OOMKilled
-  - kubernetes: Container restarted
+  - id: 1001
+    title: "Event Title"
+    text: "Event description"
+    date_happened_offset_minutes: -5
+    source: deploy|kubernetes|datadog
+    alert_type: info|warning|error
+    tags: [...]
+
+expected_rca:
+  root_cause: "Description of root cause"
+  contributing_factors: [...]
+  recommended_actions: [...]
 ```
 
-### Scenario 3: Downstream Service Failure
+### Scenario Summaries
 
-**Symptoms:**
-- Errors calling payment-service
-- Circuit breaker open
-- HTTP 503s from downstream
+#### 1. Database Connection Pool Exhaustion
+- **Symptoms**: Latency spike (50ms → 5000ms), timeout errors
+- **Metrics**: `jvm.db.pool.active`, `jvm.db.pool.timeout`, `postgresql.connections.active`
+- **Root Cause**: Deployment changed query patterns holding connections too long
 
-**Mock Data:**
+#### 2. Kubernetes Pod OOMKilled
+- **Symptoms**: Container restarts, memory at limit, GC pressure
+- **Metrics**: `kubernetes.memory.usage`, `kubernetes.containers.restarts`, `jvm.gc.pause_time`
+- **Root Cause**: Memory leak in OrderCache growing unbounded
 
-```yaml
-metrics:
-  trace.api.request.errors:
-    baseline: 2/min
-    incident: 200/min
-  trace.payment-service.request.errors:
-    baseline: 0
-    incident: 1000/min (downstream is source)
-  circuit_breaker.payment.state:
-    baseline: closed (0)
-    incident: open (1)
+#### 3. Downstream Service Failure
+- **Symptoms**: Circuit breaker open, 503 errors, timeout to payment-service
+- **Metrics**: `circuit_breaker.*.state`, cross-service error rates
+- **Root Cause**: Payment database became unreachable
 
-logs:
-  - ConnectionError: Failed to connect to payment-service:8080
-  - HTTP 503: payment-service unavailable
-  - CircuitBreaker OPEN for payment-service
-  - Fallback: Using cached response
+#### 4. Redis Cache Failure
+- **Symptoms**: 100% cache miss rate, DB overload
+- **Metrics**: `redis.clients.connected`, `app.cache.miss_rate`, `postgresql.queries.count`
+- **Root Cause**: Redis pod evicted due to node memory pressure
 
-spans:
-  - server span: POST /checkout, error=true, 5000ms
-  - client span: http.request, payment-service, timeout, error=true
-  - missing: spans from payment-service itself (it's down)
+#### 5. Kubernetes Node Pressure
+- **Symptoms**: Pod evictions, scheduling failures
+- **Metrics**: `kubernetes_state.node.status`, `kubernetes_state.pod.status_phase`
+- **Root Cause**: Batch processor deployment increased memory requirements
 
-events:
-  - Alert: payment-service health check failed
-  - kubernetes: Pod payment-service-xyz unhealthy
-```
+#### 6. Database Deadlock
+- **Symptoms**: Transaction failures, retry exhaustion
+- **Metrics**: `postgresql.deadlocks`, `postgresql.locks.count`
+- **Root Cause**: Deployment removed SELECT FOR UPDATE locking
 
-### Scenario 4: Redis Cache Failure
+#### 7. Kafka Consumer Lag
+- **Symptoms**: Growing consumer lag, processing delays
+- **Metrics**: `kafka.consumer.lag`, `app.kafka.message.processing_time`
+- **Root Cause**: N+1 query pattern in event processor
 
-**Symptoms:**
-- Cache miss rate spike
-- Increased DB load
-- Latency increase
+#### 8. CPU Throttling
+- **Symptoms**: Latency spikes during traffic peak
+- **Metrics**: `kubernetes.cpu.cfs.throttled.seconds`, `jvm.thread.blocked_count`
+- **Root Cause**: CPU limits too restrictive for marketing campaign traffic
 
-**Mock Data:**
+#### 9. DNS Resolution Failure
+- **Symptoms**: Intermittent UnknownHostException
+- **Metrics**: `dns.lookup.errors`, `coredns.dns.request.count`
+- **Root Cause**: Monitoring agent causing DNS query explosion
 
-```yaml
-metrics:
-  redis.clients.connected:
-    baseline: 50
-    incident: 0 (connection lost)
-  redis.net.rejected_connections:
-    baseline: 0
-    incident: 100+
-  app.cache.miss_rate:
-    baseline: 5%
-    incident: 100% (all misses)
-  postgresql.queries.count:
-    baseline: 100/min
-    incident: 5000/min (fallback to DB)
-  trace.api.request.duration:
-    baseline: 20ms (cache hit)
-    incident: 200ms (DB fallback)
+#### 10. SSL Certificate Expiry
+- **Symptoms**: TLS handshake failures
+- **Metrics**: `tls.handshake.errors`, `tls.certificate.days_until_expiry`
+- **Root Cause**: Certificate renewal automation failed
 
-logs:
-  - RedisConnectionException: Unable to connect to redis:6379
-  - Cache fallback: Querying database directly
-  - Redis: Connection reset by peer
-
-spans:
-  - client span: redis.get, error=true, timeout
-  - client span: postgres.query (increased count during incident)
-
-events:
-  - Alert: Redis connectivity lost
-  - kubernetes: redis-master pod evicted
-```
-
-### Scenario 5: Kubernetes Node Pressure
-
-**Symptoms:**
-- Pod evictions
-- Scheduling failures
-- Resource starvation
-
-**Mock Data:**
-
-```yaml
-metrics:
-  kubernetes_state.node.status:
-    baseline: Ready
-    incident: NotReady / MemoryPressure
-  kubernetes_state.pod.status_phase:
-    baseline: Running
-    incident: Evicted, Pending
-  kubernetes.pods.pending:
-    baseline: 0
-    incident: 10+
-  system.mem.pct_usable:
-    baseline: 30%
-    incident: 5% (pressure)
-
-logs:
-  - kubernetes event: Evicted due to node memory pressure
-  - kubernetes event: FailedScheduling: Insufficient memory
-  - Pod terminated: Node pressure eviction
-
-spans:
-  - gaps during pod eviction/restart
-  - increased latency as pods compete for resources
-
-events:
-  - kubernetes: Node memory pressure
-  - kubernetes: Pod evicted
-  - kubernetes: Deployment scaled down
-```
-
-### Scenario 6: Database Deadlock
-
-**Symptoms:**
-- Specific queries failing
-- Deadlock errors
-- Timeout on writes
-
-**Mock Data:**
-
-```yaml
-metrics:
-  postgresql.deadlocks:
-    baseline: 0
-    incident: 5+
-  postgresql.locks.count:
-    baseline: 10
-    incident: 100+
-  trace.api.write_operation.errors:
-    baseline: 0
-    incident: 50/min
-
-logs:
-  - PSQLException: Deadlock detected
-  - Transaction aborted: concurrent update conflict
-  - Retry attempt 3/3 failed: deadlock
-
-spans:
-  - client span: postgres.query (UPDATE), error=true, deadlock
-  - server span: POST /orders, error=true
-
-events:
-  - Alert: Database deadlock rate exceeded threshold
-  - Deployment: inventory-service v1.5.0 (potential cause)
-```
+#### 11-21: Additional scenarios cover rate limiting, disk I/O, network partitions, GC storms, third-party APIs, thread pools, Elasticsearch, config drift, service mesh, and secret rotation issues.
 
 ---
 
