@@ -8,6 +8,7 @@ import com.example.rca.dice.model.AlertTrigger
 import com.example.rca.dice.model.AlertType
 import com.example.rca.mock.MockDatadogClient
 import com.example.rca.mock.scenario
+import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.Test
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Autowired
@@ -27,8 +28,13 @@ import kotlin.test.assertNotNull
  * 4. PUSH Analysis results to REAL dice-server module (via HTTP)
  * 5. QUERY REAL dice-server to verify it used Embabel logic to extract/reason
  * 
- * NOTE: This test requires a running dice-server instance on localhost:8080.
+ * NOTE: This test requires:
+ * - A running dice-server instance on localhost:8080
+ * - OpenAI API key (OPENAI_API_KEY env var)
+ * 
+ * To run: Start dice-server, set OPENAI_API_KEY, then remove @Disabled
  */
+@Disabled("Requires running dice-server and OpenAI API key")
 @SpringBootTest
 @ActiveProfiles("test")
 class SystemIntegrationTest {
