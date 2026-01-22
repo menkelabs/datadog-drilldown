@@ -1,0 +1,333 @@
+# Scenario: Kubernetes CPU Throttling
+#
+# Root Cause: Container CPU limits causing throttling during peak load,
+# resulting in degraded performance despite available node resources.
+
+name: cpu-throttling
+description: >
+  Kubernetes CPU throttling causing latency spikes during peak load.
+  Container CPU limits are too restrictive for actual workload needs.
+
+timing:
+  incident_start: "2026-01-22T14:00:00Z"
+  baseline_window_minutes: 30
+  incident_window_minutes: 30
+
+scope:
+  service: search-service
+  environment: prod
+  namespace: production
+  deployment: search-service
+
+monitor:
+  id: 89012
+  name: "Search Service P99 Latency"
+  type: metric alert
+  query: "avg(last_5m):p99:trace.search-service.request.duration{env:prod} > 1000"
+  message: "Search service P99 latency above 1 second. Check for throttling or resource constraints."
+  tags:
+    - service:search-service
+    - env:prod
+
+metrics:
+  # CPU throttling - KEY INDICATOR
+  - name: kubernetes.cpu.cfs.throttled.seconds
+    type: count
+    tags: ["kube_deployment:search-service", "kube_namespace:production"]
+    baseline:
+      value: 0.1
+      noise: 0.05
+    incident:
+      pattern: spike
+      value: 30  # 30 seconds throttled per minute
+      noise: 5
+
+  - name: kubernetes.cpu.cfs.throttled.periods
+    type: count
+    tags: ["kube_deployment:search-service", "kube_namespace:production"]
+    baseline:
+      value: 5
+    incident:
+      value: 500  # 500 periods throttled
+
+  # CPU usage vs limits
+  - name: kubernetes.cpu.usage.total
+    type: gauge
+    unit: millicores
+    tags: ["kube_deployment:search-service", "kube_namespace:production"]
+    baseline:
+      value: 400
+      noise: 100
+    incident:
+      value: 1000  # At limit
+      noise: 50
+
+  - name: kubernetes.cpu.limits
+    type: gauge
+    unit: millicores
+    tags: ["kube_deployment:search-service", "kube_namespace:production"]
+    baseline:
+      value: 1000  # 1 core limit
+    incident:
+      value: 1000
+
+  - name: kubernetes.cpu.requests
+    type: gauge
+    unit: millicores
+    tags: ["kube_deployment:search-service", "kube_namespace:production"]
+    baseline:
+      value: 500
+    incident:
+      value: 500
+
+  # Node has available CPU (proving it's throttling, not node saturation)
+  - name: system.cpu.idle
+    type: gauge
+    unit: percent
+    tags: ["host:worker-node-2"]
+    baseline:
+      value: 60
+    incident:
+      value: 45  # Still has idle CPU
+
+  # Service latency impact
+  - name: trace.search-service.request.duration
+    type: gauge
+    unit: millisecond
+    tags: ["service:search-service", "env:prod"]
+    baseline:
+      value: 100
+      noise: 30
+    incident:
+      pattern: spike
+      value: 2500
+      peak_value: 5000
+      noise: 500
+
+  - name: trace.search-service.request.duration.p99
+    type: gauge
+    unit: millisecond
+    tags: ["service:search-service", "env:prod"]
+    baseline:
+      value: 250
+    incident:
+      value: 4500
+
+  # Request rate (traffic spike)
+  - name: trace.search-service.request.hits
+    type: count
+    tags: ["service:search-service", "env:prod"]
+    baseline:
+      value: 500
+    incident:
+      value: 2000  # 4x traffic increase
+
+  # JVM CPU metrics
+  - name: jvm.cpu.usage
+    type: gauge
+    unit: percent
+    tags: ["service:search-service", "env:prod"]
+    baseline:
+      value: 40
+    incident:
+      value: 100  # Maxed at limit
+
+  # GC affected by CPU throttling
+  - name: jvm.gc.pause_time
+    type: gauge
+    unit: millisecond
+    tags: ["service:search-service", "env:prod"]
+    baseline:
+      value: 20
+      noise: 10
+    incident:
+      value: 500  # GC taking longer due to throttling
+      noise: 200
+
+  # Thread pool metrics
+  - name: jvm.thread.count
+    type: gauge
+    tags: ["service:search-service", "env:prod"]
+    baseline:
+      value: 50
+    incident:
+      value: 200  # Threads piling up
+
+  - name: app.threadpool.queue_size
+    type: gauge
+    tags: ["service:search-service", "pool:search-executor"]
+    baseline:
+      value: 5
+    incident:
+      value: 500  # Requests queuing
+
+logs:
+  baseline:
+    - timestamp_offset_minutes: -20
+      service: search-service
+      status: info
+      message: "Search completed in 95ms for query: 'product'"
+
+  incident:
+    - timestamp_offset_minutes: 1
+      service: search-service
+      status: warn
+      message: "High request latency detected: avg 1500ms"
+      attributes:
+        latency.avg_ms: 1500
+        latency.p99_ms: 4000
+
+    - timestamp_offset_minutes: 2
+      service: search-service
+      status: warn
+      message: "Thread pool queue growing: 200 pending requests"
+      attributes:
+        threadpool.name: search-executor
+        threadpool.queue_size: 200
+        threadpool.active_threads: 50
+
+    - timestamp_offset_minutes: 3
+      service: search-service
+      status: warn
+      message: "GC pause longer than expected: 450ms"
+      attributes:
+        gc.type: G1-Young-Generation
+        gc.pause_ms: 450
+        gc.cause: "Allocation Failure"
+
+    - timestamp_offset_minutes: 5
+      service: search-service
+      status: warn
+      message: "CPU throttling detected: 25 seconds throttled in last minute"
+      attributes:
+        cpu.throttled_seconds: 25
+        cpu.limit_millicores: 1000
+
+    - timestamp_offset_minutes: 10
+      service: search-service
+      status: error
+      message: "Request timeout: search query exceeded 5000ms"
+      attributes:
+        error.type: TimeoutException
+        query: "electronics smartphone"
+        timeout_ms: 5000
+
+    - timestamp_offset_minutes: 10
+      service: search-service
+      status: warn
+      message: "Thread pool rejecting requests: queue full"
+      attributes:
+        threadpool.name: search-executor
+        threadpool.queue_size: 1000
+        threadpool.rejected_count: 50
+
+    - timestamp_offset_minutes: 15
+      service: kubernetes
+      status: info
+      message: "Container search-service CPU usage at limit"
+      attributes:
+        kubernetes.container.name: search-service
+        kubernetes.cpu.usage_millicores: 1000
+        kubernetes.cpu.limit_millicores: 1000
+
+spans:
+  baseline:
+    - trace_id: trace-search-base-001
+      spans:
+        - span_id: span-search-001
+          service: search-service
+          resource: "GET /search"
+          span_kind: server
+          duration_ns: 100000000  # 100ms
+          is_error: false
+
+        - span_id: span-es-001
+          service: search-service
+          resource: "elasticsearch.search"
+          span_kind: client
+          duration_ns: 50000000
+          peer.service: elasticsearch
+
+  incident:
+    # Request with CPU throttling delays
+    - trace_id: trace-search-inc-001
+      spans:
+        - span_id: span-search-inc-001
+          service: search-service
+          resource: "GET /search"
+          span_kind: server
+          duration_ns: 2500000000  # 2.5s
+          is_error: false
+
+        - span_id: span-es-inc-001
+          service: search-service
+          resource: "elasticsearch.search"
+          span_kind: client
+          duration_ns: 100000000  # ES is fine
+          peer.service: elasticsearch
+
+        # Note: 2.4s unaccounted for = CPU throttling
+
+    # Timed out request
+    - trace_id: trace-search-inc-002
+      spans:
+        - span_id: span-search-inc-002
+          service: search-service
+          resource: "GET /search"
+          span_kind: server
+          duration_ns: 5000000000  # 5s timeout
+          is_error: true
+          http.status_code: 504
+
+events:
+  - id: 8001
+    title: "Traffic spike: Marketing campaign launch"
+    text: "Marketing email sent to 1M users, expect traffic increase"
+    date_happened_offset_minutes: -5
+    source: marketing
+    alert_type: info
+    tags:
+      - campaign:spring-sale
+
+  - id: 8002
+    title: "Alert: search-service P99 latency > 1s"
+    text: "Search service latency degraded"
+    date_happened_offset_minutes: 5
+    source: datadog
+    alert_type: warning
+    tags:
+      - service:search-service
+
+  - id: 8003
+    title: "HPA: search-service scaled to 5 replicas"
+    text: "Horizontal Pod Autoscaler triggered scale-out"
+    date_happened_offset_minutes: 10
+    source: kubernetes
+    alert_type: info
+    tags:
+      - kube_deployment:search-service
+      - hpa:search-service-hpa
+
+  - id: 8004
+    title: "HPA: search-service scale limited"
+    text: "Cannot scale beyond 5 replicas (max limit)"
+    date_happened_offset_minutes: 15
+    source: kubernetes
+    alert_type: warning
+    tags:
+      - kube_deployment:search-service
+      - hpa.reason:MaxReplicasReached
+
+expected_rca:
+  root_cause: "CPU limits too restrictive for traffic spike"
+  contributing_factors:
+    - "Marketing campaign caused 4x traffic increase"
+    - "CPU limit (1000m) insufficient for peak load"
+    - "HPA max replicas (5) reached"
+    - "CPU throttling causes request queuing and timeouts"
+  recommended_actions:
+    - "Increase CPU limits to 2000m"
+    - "Increase HPA max replicas"
+    - "Consider VPA (Vertical Pod Autoscaler)"
+    - "Coordinate with marketing for traffic forecasting"
+    - "Implement request rate limiting as safeguard"

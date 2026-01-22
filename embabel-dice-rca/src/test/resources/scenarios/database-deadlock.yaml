@@ -1,0 +1,355 @@
+# Scenario: Database Deadlock
+#
+# Root Cause: Concurrent transactions create deadlock conditions,
+# causing transaction failures and retries.
+
+name: database-deadlock
+description: >
+  Database deadlocks occurring due to concurrent updates to the same rows.
+  A deployment changed transaction ordering, causing deadlock conditions.
+
+timing:
+  incident_start: "2026-01-20T11:00:00Z"
+  baseline_window_minutes: 30
+  incident_window_minutes: 30
+
+scope:
+  service: inventory-service
+  environment: prod
+  database: inventory-db
+
+monitor:
+  id: 67890
+  name: "PostgreSQL Deadlocks"
+  type: metric alert
+  query: "sum(last_5m):sum:postgresql.deadlocks{db:inventory-db,env:prod}.as_count() > 5"
+  message: "Database deadlocks detected. Check concurrent transaction patterns."
+  tags:
+    - db:inventory-db
+    - env:prod
+
+metrics:
+  # Deadlock metrics - KEY INDICATOR
+  - name: postgresql.deadlocks
+    type: count
+    tags: ["db:inventory-db", "env:prod"]
+    baseline:
+      value: 0
+    incident:
+      pattern: spike
+      value: 50
+      noise: 15
+
+  # Lock metrics
+  - name: postgresql.locks.count
+    type: gauge
+    tags: ["db:inventory-db", "env:prod", "mode:exclusive"]
+    baseline:
+      value: 5
+      noise: 2
+    incident:
+      value: 150
+      noise: 30
+
+  - name: postgresql.locks.count
+    type: gauge
+    tags: ["db:inventory-db", "env:prod", "mode:share"]
+    baseline:
+      value: 20
+      noise: 5
+    incident:
+      value: 300
+      noise: 50
+
+  # Transaction metrics
+  - name: postgresql.transactions.rollback
+    type: count
+    tags: ["db:inventory-db", "env:prod"]
+    baseline:
+      value: 2
+    incident:
+      pattern: spike
+      value: 200
+      noise: 50
+
+  - name: postgresql.transactions.commit
+    type: count
+    tags: ["db:inventory-db", "env:prod"]
+    baseline:
+      value: 500
+    incident:
+      value: 300  # Reduced due to failures
+
+  # Query performance
+  - name: postgresql.queries.time
+    type: gauge
+    unit: millisecond
+    tags: ["db:inventory-db", "env:prod"]
+    baseline:
+      value: 10
+      noise: 5
+    incident:
+      value: 500  # Waiting on locks
+      noise: 200
+
+  # Service metrics
+  - name: trace.inventory-service.request.errors
+    type: count
+    tags: ["service:inventory-service", "env:prod"]
+    baseline:
+      value: 2
+    incident:
+      pattern: spike
+      value: 200
+      noise: 50
+
+  - name: trace.inventory-service.request.duration
+    type: gauge
+    unit: millisecond
+    tags: ["service:inventory-service", "env:prod"]
+    baseline:
+      value: 50
+      noise: 15
+    incident:
+      value: 2000  # Retry delays
+      noise: 500
+
+  # Retry metrics
+  - name: app.db.retry.count
+    type: count
+    tags: ["service:inventory-service", "reason:deadlock"]
+    baseline:
+      value: 0
+    incident:
+      value: 150
+      noise: 30
+
+logs:
+  baseline:
+    - timestamp_offset_minutes: -20
+      service: inventory-service
+      status: info
+      message: "Inventory updated for product-12345"
+
+  incident:
+    # Deadlock errors
+    - timestamp_offset_minutes: 1
+      service: inventory-service
+      status: error
+      message: "PSQLException: ERROR: deadlock detected"
+      attributes:
+        error.type: PSQLException
+        error.message: "deadlock detected"
+        error.detail: "Process 12345 waits for ShareLock on transaction 67890; blocked by process 54321"
+        error.hint: "See server log for query details"
+        error.stack: |
+          org.postgresql.util.PSQLException: ERROR: deadlock detected
+            Detail: Process 12345 waits for ShareLock on transaction 67890; blocked by process 54321.
+            Process 54321 waits for ShareLock on transaction 12345; blocked by process 12345.
+            at org.postgresql.core.v3.QueryExecutorImpl.receiveErrorResponse(QueryExecutorImpl.java:2553)
+            at com.example.inventory.repository.InventoryRepository.updateStock(InventoryRepository.java:89)
+
+    - timestamp_offset_minutes: 2
+      service: inventory-service
+      status: warn
+      message: "Retrying transaction after deadlock (attempt 1/3)"
+      attributes:
+        retry.attempt: 1
+        retry.max: 3
+        retry.reason: "deadlock"
+
+    - timestamp_offset_minutes: 2
+      service: inventory-service
+      status: error
+      message: "PSQLException: ERROR: deadlock detected"
+      attributes:
+        error.type: PSQLException
+        db.statement: "UPDATE inventory SET quantity = quantity - $1 WHERE product_id = $2"
+
+    - timestamp_offset_minutes: 3
+      service: inventory-service
+      status: warn
+      message: "Retrying transaction after deadlock (attempt 2/3)"
+      attributes:
+        retry.attempt: 2
+
+    - timestamp_offset_minutes: 3
+      service: inventory-service
+      status: error
+      message: "PSQLException: ERROR: deadlock detected"
+      attributes:
+        error.type: PSQLException
+
+    - timestamp_offset_minutes: 4
+      service: inventory-service
+      status: error
+      message: "Transaction failed after 3 retries: deadlock"
+      attributes:
+        error.type: TransactionFailedException
+        retry.exhausted: true
+
+    # Database logs
+    - timestamp_offset_minutes: 5
+      service: postgresql
+      host: inventory-db-primary
+      status: error
+      message: "LOG: process 12345 detected deadlock while waiting for ShareLock"
+      attributes:
+        db.process_id: 12345
+        db.lock_type: ShareLock
+        db.blocked_by: 54321
+
+    - timestamp_offset_minutes: 5
+      service: postgresql
+      status: info
+      message: "DETAIL: Process holding the lock: UPDATE inventory SET quantity = $1 WHERE product_id = $2"
+      attributes:
+        db.blocking_query: "UPDATE inventory SET quantity = $1 WHERE product_id = $2"
+
+    - timestamp_offset_minutes: 10
+      service: inventory-service
+      status: error
+      message: "High deadlock rate detected: 50 in last 5 minutes"
+      attributes:
+        deadlock.count: 50
+        deadlock.period_minutes: 5
+
+spans:
+  baseline:
+    - trace_id: trace-inventory-base-001
+      spans:
+        - span_id: span-inv-001
+          service: inventory-service
+          resource: "POST /inventory/reserve"
+          span_kind: server
+          duration_ns: 50000000
+          is_error: false
+
+        - span_id: span-inv-db-001
+          service: inventory-service
+          resource: "UPDATE inventory SET quantity = $1"
+          span_kind: client
+          duration_ns: 10000000
+          peer.service: postgres
+          db.type: postgresql
+
+  incident:
+    # Request with deadlock retry
+    - trace_id: trace-inventory-inc-001
+      spans:
+        - span_id: span-inv-inc-001
+          service: inventory-service
+          resource: "POST /inventory/reserve"
+          span_kind: server
+          duration_ns: 2500000000  # 2.5s including retries
+          is_error: false
+
+        - span_id: span-inv-db-inc-001a
+          service: inventory-service
+          resource: "UPDATE inventory SET quantity = $1"
+          span_kind: client
+          duration_ns: 500000000
+          is_error: true
+          peer.service: postgres
+          error.type: DeadlockException
+
+        - span_id: span-inv-db-inc-001b
+          service: inventory-service
+          resource: "UPDATE inventory SET quantity = $1"
+          span_kind: client
+          duration_ns: 500000000
+          is_error: true
+          peer.service: postgres
+          error.type: DeadlockException
+
+        - span_id: span-inv-db-inc-001c
+          service: inventory-service
+          resource: "UPDATE inventory SET quantity = $1"
+          span_kind: client
+          duration_ns: 10000000
+          is_error: false  # Third retry succeeded
+          peer.service: postgres
+
+    # Request that exhausted retries
+    - trace_id: trace-inventory-inc-002
+      spans:
+        - span_id: span-inv-inc-002
+          service: inventory-service
+          resource: "POST /inventory/reserve"
+          span_kind: server
+          duration_ns: 3000000000
+          is_error: true
+          http.status_code: 500
+
+        - span_id: span-inv-db-inc-002a
+          service: inventory-service
+          resource: "UPDATE inventory SET quantity = $1"
+          span_kind: client
+          duration_ns: 1000000000
+          is_error: true
+          peer.service: postgres
+          error.type: DeadlockException
+
+        - span_id: span-inv-db-inc-002b
+          service: inventory-service
+          resource: "UPDATE inventory SET quantity = $1"
+          span_kind: client
+          duration_ns: 1000000000
+          is_error: true
+          peer.service: postgres
+          error.type: DeadlockException
+
+        - span_id: span-inv-db-inc-002c
+          service: inventory-service
+          resource: "UPDATE inventory SET quantity = $1"
+          span_kind: client
+          duration_ns: 1000000000
+          is_error: true
+          peer.service: postgres
+          error.type: DeadlockException
+
+events:
+  - id: 6001
+    title: "Deployment: inventory-service v2.3.0"
+    text: |
+      Deployed inventory-service with performance improvements.
+      
+      Changes:
+      - Parallel inventory updates for bulk orders
+      - Removed SELECT FOR UPDATE (optimization)
+    date_happened_offset_minutes: -10
+    source: deploy
+    alert_type: info
+    tags:
+      - service:inventory-service
+      - version:2.3.0
+
+  - id: 6002
+    title: "Alert: PostgreSQL deadlocks > 5"
+    text: "Database experiencing high deadlock rate"
+    date_happened_offset_minutes: 1
+    source: datadog
+    alert_type: error
+    tags:
+      - db:inventory-db
+
+  - id: 6003
+    title: "Alert: inventory-service error rate > 10%"
+    text: "High error rate due to transaction failures"
+    date_happened_offset_minutes: 5
+    source: datadog
+    alert_type: error
+    tags:
+      - service:inventory-service
+
+expected_rca:
+  root_cause: "Deployment v2.3.0 removed SELECT FOR UPDATE, causing deadlocks"
+  contributing_factors:
+    - "Parallel inventory updates now access same rows in different order"
+    - "Removed pessimistic locking (SELECT FOR UPDATE)"
+    - "High concurrent order volume during peak hours"
+  recommended_actions:
+    - "Rollback to v2.2.x immediately"
+    - "Restore SELECT FOR UPDATE or implement row-level locking"
+    - "Ensure consistent lock ordering in transactions"
+    - "Consider optimistic locking with version columns"

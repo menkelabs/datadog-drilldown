@@ -1,0 +1,339 @@
+# Scenario: Kafka Consumer Lag
+#
+# Root Cause: Kafka consumer group falls behind, causing message processing
+# delays and eventual backpressure on producers.
+
+name: kafka-consumer-lag
+description: >
+  Kafka consumer lag builds up due to slow message processing.
+  A deployment introduced inefficient processing logic causing lag spike.
+
+timing:
+  incident_start: "2026-01-21T08:00:00Z"
+  baseline_window_minutes: 30
+  incident_window_minutes: 30
+
+scope:
+  service: event-processor
+  environment: prod
+  kafka_cluster: kafka-prod
+  consumer_group: event-processor-group
+  topics:
+    - user-events
+    - order-events
+
+monitor:
+  id: 78901
+  name: "Kafka Consumer Lag"
+  type: metric alert
+  query: "avg(last_5m):sum:kafka.consumer.lag{consumer_group:event-processor-group,env:prod} > 100000"
+  message: "Kafka consumer lag exceeded 100k messages. Check consumer processing."
+  tags:
+    - service:event-processor
+    - env:prod
+
+metrics:
+  # Consumer lag - KEY INDICATOR
+  - name: kafka.consumer.lag
+    type: gauge
+    tags: ["consumer_group:event-processor-group", "topic:user-events", "env:prod"]
+    baseline:
+      value: 500
+      noise: 200
+    incident:
+      pattern: gradual_increase
+      value: 500000  # 500k lag
+      noise: 10000
+
+  - name: kafka.consumer.lag
+    type: gauge
+    tags: ["consumer_group:event-processor-group", "topic:order-events", "env:prod"]
+    baseline:
+      value: 200
+      noise: 100
+    incident:
+      pattern: gradual_increase
+      value: 250000
+      noise: 5000
+
+  # Consumer offset metrics
+  - name: kafka.consumer.offset
+    type: gauge
+    tags: ["consumer_group:event-processor-group", "topic:user-events"]
+    baseline:
+      pattern: linear_increase
+      rate_per_minute: 1000
+    incident:
+      pattern: linear_increase
+      rate_per_minute: 100  # 10x slower
+
+  # Processing rate
+  - name: kafka.consumer.messages_consumed
+    type: count
+    tags: ["consumer_group:event-processor-group", "env:prod"]
+    baseline:
+      value: 10000  # per minute
+    incident:
+      value: 1000  # 10x slower
+
+  # Processing time per message
+  - name: app.kafka.message.processing_time
+    type: gauge
+    unit: millisecond
+    tags: ["service:event-processor", "topic:user-events"]
+    baseline:
+      value: 5
+      noise: 2
+    incident:
+      value: 500  # 100x slower
+      noise: 100
+
+  # Service metrics
+  - name: trace.event-processor.request.duration
+    type: gauge
+    unit: millisecond
+    tags: ["service:event-processor", "operation:process_event"]
+    baseline:
+      value: 5
+      noise: 2
+    incident:
+      value: 500
+      noise: 100
+
+  # JVM metrics (CPU bound)
+  - name: jvm.cpu.usage
+    type: gauge
+    unit: percent
+    tags: ["service:event-processor", "env:prod"]
+    baseline:
+      value: 30
+      noise: 10
+    incident:
+      value: 95  # Maxed out
+      noise: 3
+
+  # Database metrics (N+1 queries)
+  - name: postgresql.queries.count
+    type: count
+    tags: ["service:event-processor", "db:events-db"]
+    baseline:
+      value: 1000
+    incident:
+      value: 100000  # 100x more queries
+
+  # Producer backpressure
+  - name: kafka.producer.buffer.available_bytes
+    type: gauge
+    tags: ["service:order-service", "env:prod"]
+    baseline:
+      value: 30000000  # 30MB free
+    incident:
+      value: 1000000  # Only 1MB free - backpressure
+
+  - name: kafka.producer.record_queue_time_avg
+    type: gauge
+    unit: millisecond
+    tags: ["service:order-service", "env:prod"]
+    baseline:
+      value: 5
+    incident:
+      value: 5000  # 5 seconds waiting
+
+logs:
+  baseline:
+    - timestamp_offset_minutes: -20
+      service: event-processor
+      status: info
+      message: "Processed 1000 events in 5.2 seconds"
+
+  incident:
+    - timestamp_offset_minutes: 1
+      service: event-processor
+      status: warn
+      message: "Consumer lag increasing: 10,000 messages behind"
+      attributes:
+        kafka.consumer_group: event-processor-group
+        kafka.lag: 10000
+
+    - timestamp_offset_minutes: 5
+      service: event-processor
+      status: warn
+      message: "Slow message processing detected: 500ms per message"
+      attributes:
+        processing.time_ms: 500
+        processing.expected_ms: 5
+
+    - timestamp_offset_minutes: 5
+      service: event-processor
+      status: warn
+      message: "N+1 query detected: 100 queries for single event batch"
+      attributes:
+        query.count: 100
+        query.pattern: "SELECT * FROM users WHERE id = $1"
+
+    - timestamp_offset_minutes: 10
+      service: event-processor
+      status: warn
+      message: "Consumer lag critical: 100,000 messages behind"
+      attributes:
+        kafka.lag: 100000
+
+    - timestamp_offset_minutes: 15
+      service: event-processor
+      status: error
+      message: "Consumer lag exceeded threshold: 250,000 messages"
+      attributes:
+        kafka.lag: 250000
+        kafka.consumer_group: event-processor-group
+
+    - timestamp_offset_minutes: 15
+      service: order-service
+      status: warn
+      message: "Kafka producer buffer filling up: 95% full"
+      attributes:
+        kafka.producer.buffer_pct: 95
+        kafka.topic: order-events
+
+    - timestamp_offset_minutes: 20
+      service: order-service
+      status: error
+      message: "Kafka producer send timeout: buffer full"
+      attributes:
+        error.type: TimeoutException
+        kafka.topic: order-events
+
+    - timestamp_offset_minutes: 25
+      service: event-processor
+      status: error
+      message: "Consumer lag at 500,000 - data freshness SLA breached"
+      attributes:
+        kafka.lag: 500000
+        sla.freshness_minutes: 5
+        sla.actual_delay_minutes: 50
+
+spans:
+  baseline:
+    - trace_id: trace-event-base-001
+      spans:
+        - span_id: span-event-001
+          service: event-processor
+          resource: "process_user_event"
+          span_kind: consumer
+          duration_ns: 5000000  # 5ms
+          is_error: false
+          messaging.system: kafka
+          messaging.destination: user-events
+
+        - span_id: span-event-db-001
+          service: event-processor
+          resource: "SELECT * FROM users WHERE id = $1"
+          span_kind: client
+          duration_ns: 2000000  # 2ms
+          peer.service: postgres
+
+  incident:
+    - trace_id: trace-event-inc-001
+      spans:
+        - span_id: span-event-inc-001
+          service: event-processor
+          resource: "process_user_event"
+          span_kind: consumer
+          duration_ns: 500000000  # 500ms
+          is_error: false
+          messaging.system: kafka
+          messaging.destination: user-events
+
+        # N+1 queries - multiple DB calls
+        - span_id: span-event-db-inc-001
+          service: event-processor
+          resource: "SELECT * FROM users WHERE id = $1"
+          span_kind: client
+          duration_ns: 5000000
+          peer.service: postgres
+
+        - span_id: span-event-db-inc-002
+          service: event-processor
+          resource: "SELECT * FROM user_preferences WHERE user_id = $1"
+          span_kind: client
+          duration_ns: 5000000
+          peer.service: postgres
+
+        - span_id: span-event-db-inc-003
+          service: event-processor
+          resource: "SELECT * FROM user_subscriptions WHERE user_id = $1"
+          span_kind: client
+          duration_ns: 5000000
+          peer.service: postgres
+          # ... many more similar queries
+
+    # Producer timeout due to backpressure
+    - trace_id: trace-order-inc-001
+      spans:
+        - span_id: span-order-inc-001
+          service: order-service
+          resource: "POST /orders"
+          span_kind: server
+          duration_ns: 5100000000
+          is_error: true
+          http.status_code: 504
+
+        - span_id: span-kafka-inc-001
+          service: order-service
+          resource: "kafka.produce"
+          span_kind: producer
+          duration_ns: 5000000000
+          is_error: true
+          messaging.system: kafka
+          messaging.destination: order-events
+          error.type: TimeoutException
+          error.message: "Producer buffer full"
+
+events:
+  - id: 7001
+    title: "Deployment: event-processor v4.0.0"
+    text: |
+      Deployed event-processor with new event enrichment.
+      
+      Changes:
+      - Added user preference enrichment
+      - Added subscription status lookup
+      - New: Real-time user segmentation
+    date_happened_offset_minutes: -30
+    source: deploy
+    alert_type: info
+    tags:
+      - service:event-processor
+      - version:4.0.0
+
+  - id: 7002
+    title: "Alert: Kafka consumer lag > 100k"
+    text: "Consumer group event-processor-group lag exceeded threshold"
+    date_happened_offset_minutes: 10
+    source: datadog
+    alert_type: warning
+    tags:
+      - kafka.consumer_group:event-processor-group
+
+  - id: 7003
+    title: "Alert: Data freshness SLA breach"
+    text: "Event processing delay exceeds 5 minute SLA"
+    date_happened_offset_minutes: 25
+    source: datadog
+    alert_type: error
+    tags:
+      - service:event-processor
+      - sla:data_freshness
+
+expected_rca:
+  root_cause: "N+1 query pattern introduced in event-processor v4.0.0"
+  contributing_factors:
+    - "New enrichment logic makes individual DB queries per event"
+    - "100x increase in database queries"
+    - "Processing time increased from 5ms to 500ms per event"
+    - "Consumer cannot keep up with producer rate"
+  recommended_actions:
+    - "Batch database queries using IN clauses"
+    - "Implement caching for user preferences"
+    - "Add prefetching for common lookups"
+    - "Scale consumer group horizontally as interim fix"
+    - "Consider rollback if lag continues growing"

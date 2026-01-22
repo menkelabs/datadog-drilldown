@@ -1,0 +1,323 @@
+# Scenario: Envoy Sidecar Proxy Failure
+#
+# Root Cause: Envoy sidecar proxy crashing due to memory issues,
+# causing service mesh communication failures.
+
+name: envoy-sidecar-failure
+description: >
+  Envoy sidecar proxies crashing due to excessive memory usage.
+  Service mesh traffic failing intermittently across multiple services.
+
+timing:
+  incident_start: "2026-02-02T08:00:00Z"
+  baseline_window_minutes: 30
+  incident_window_minutes: 30
+
+scope:
+  environment: prod
+  mesh: istio
+  affected_services:
+    - payment-service
+    - order-service
+    - inventory-service
+
+monitor:
+  id: 10101
+  name: "Envoy Proxy Health"
+  type: metric alert
+  query: "avg(last_5m):sum:envoy.server.live{mesh:istio,env:prod}.as_count() < 0.9 * sum:kubernetes.pods.running{mesh:istio,env:prod}"
+  message: "Envoy sidecars unhealthy. Check proxy memory and configuration."
+  tags:
+    - mesh:istio
+    - env:prod
+
+metrics:
+  # Envoy proxy metrics - KEY INDICATORS
+  - name: envoy.server.live
+    type: gauge
+    tags: ["mesh:istio", "service:payment-service"]
+    baseline:
+      value: 3  # 3 pods
+    incident:
+      pattern: intermittent
+      value: 1  # Only 1 healthy
+
+  - name: envoy.server.memory_allocated
+    type: gauge
+    unit: byte
+    tags: ["mesh:istio", "service:payment-service"]
+    baseline:
+      value: 100000000  # 100MB
+    incident:
+      value: 500000000  # 500MB - near limit
+
+  - name: envoy.server.hot_restart_epoch
+    type: count
+    tags: ["mesh:istio", "service:payment-service"]
+    baseline:
+      value: 0
+    incident:
+      value: 10  # Multiple restarts
+
+  # Connection metrics
+  - name: envoy.cluster.upstream_cx_connect_fail
+    type: count
+    tags: ["mesh:istio", "cluster:payment-service"]
+    baseline:
+      value: 2
+    incident:
+      value: 500
+
+  - name: envoy.cluster.upstream_cx_connect_timeout
+    type: count
+    tags: ["mesh:istio", "cluster:payment-service"]
+    baseline:
+      value: 0
+    incident:
+      value: 300
+
+  - name: envoy.http.downstream_cx_destroy_remote_active_rq
+    type: count
+    tags: ["mesh:istio"]
+    baseline:
+      value: 5
+    incident:
+      value: 400  # Connections dropped
+
+  # Circuit breaker triggers
+  - name: envoy.cluster.upstream_rq_pending_overflow
+    type: count
+    tags: ["mesh:istio", "cluster:payment-service"]
+    baseline:
+      value: 0
+    incident:
+      value: 200  # Circuit breaker
+
+  # Request metrics
+  - name: envoy.http.downstream_rq_5xx
+    type: count
+    tags: ["mesh:istio", "service:order-service"]
+    baseline:
+      value: 5
+    incident:
+      value: 500
+
+  - name: envoy.http.downstream_rq_503
+    type: count
+    tags: ["mesh:istio"]
+    baseline:
+      value: 2
+    incident:
+      value: 400  # No healthy upstream
+
+  # Container metrics
+  - name: kubernetes.containers.restarts
+    type: count
+    tags: ["container:istio-proxy", "kube_deployment:payment-service"]
+    baseline:
+      value: 0
+    incident:
+      value: 15  # Many restarts
+
+  - name: kubernetes.memory.usage
+    type: gauge
+    unit: byte
+    tags: ["container:istio-proxy", "kube_deployment:payment-service"]
+    baseline:
+      value: 100000000  # 100MB
+    incident:
+      value: 490000000  # 490MB - near 512MB limit
+
+  # Service mesh latency
+  - name: istio.mesh.request.duration.milliseconds
+    type: gauge
+    tags: ["destination_service:payment-service"]
+    baseline:
+      value: 50
+      noise: 20
+    incident:
+      value: 5000
+      noise: 2000
+
+logs:
+  baseline:
+    - timestamp_offset_minutes: -20
+      service: istio-proxy
+      status: info
+      message: "upstream connect success"
+
+  incident:
+    # Memory warnings
+    - timestamp_offset_minutes: 1
+      service: istio-proxy
+      host: payment-service-xyz-abc12
+      status: warn
+      message: "Envoy memory usage high: 450MB / 512MB limit"
+      attributes:
+        container: istio-proxy
+        memory.used_mb: 450
+        memory.limit_mb: 512
+
+    # Proxy crash
+    - timestamp_offset_minutes: 2
+      service: istio-proxy
+      host: payment-service-xyz-abc12
+      status: error
+      message: "Envoy proxy terminated: OOMKilled"
+      attributes:
+        container: istio-proxy
+        termination.reason: OOMKilled
+        termination.exit_code: 137
+
+    - timestamp_offset_minutes: 2
+      service: kubernetes
+      status: warn
+      message: "Container istio-proxy in pod payment-service-xyz-abc12 was OOMKilled"
+      attributes:
+        kubernetes.event.reason: OOMKilled
+        kubernetes.container.name: istio-proxy
+
+    # Upstream failures
+    - timestamp_offset_minutes: 3
+      service: istio-proxy
+      host: order-service-xyz-def34
+      status: error
+      message: "upstream connect error: connection failure"
+      attributes:
+        error.type: UHConnectionFailure
+        cluster: payment-service
+        upstream.address: "10.0.0.50:8080"
+
+    - timestamp_offset_minutes: 4
+      service: istio-proxy
+      status: warn
+      message: "Circuit breaker triggered: max pending requests exceeded"
+      attributes:
+        cluster: payment-service
+        circuit_breaker.type: pending_requests
+        pending_requests: 1024
+
+    # Health check failures
+    - timestamp_offset_minutes: 5
+      service: istio-proxy
+      status: error
+      message: "Health check failure: no healthy upstream"
+      attributes:
+        cluster: payment-service
+        healthy_hosts: 0
+        total_hosts: 3
+
+    # Service degradation
+    - timestamp_offset_minutes: 7
+      service: order-service
+      status: error
+      message: "Failed to call payment-service: upstream connect error"
+      attributes:
+        error.type: UpstreamConnectionFailure
+        downstream.service: order-service
+        upstream.service: payment-service
+        envoy.response_flags: "UF,URX"
+
+    # Multiple container restarts
+    - timestamp_offset_minutes: 10
+      service: kubernetes
+      status: warn
+      message: "Container istio-proxy restarting frequently"
+      attributes:
+        kubernetes.pod.name: payment-service-xyz-abc12
+        restarts.count: 5
+        restarts.window_minutes: 10
+
+spans:
+  baseline:
+    - trace_id: trace-mesh-base-001
+      spans:
+        - span_id: span-order-001
+          service: order-service
+          resource: "POST /orders"
+          span_kind: server
+          duration_ns: 200000000
+          is_error: false
+
+        - span_id: span-payment-001
+          service: order-service
+          resource: "payment-service"
+          span_kind: client
+          duration_ns: 100000000
+          peer.service: payment-service
+
+        - span_id: span-payment-server-001
+          service: payment-service
+          resource: "POST /payments"
+          span_kind: server
+          duration_ns: 80000000
+
+  incident:
+    # Failed due to proxy down
+    - trace_id: trace-mesh-inc-001
+      spans:
+        - span_id: span-order-inc-001
+          service: order-service
+          resource: "POST /orders"
+          span_kind: server
+          duration_ns: 100000000
+          is_error: true
+          http.status_code: 503
+
+        - span_id: span-payment-inc-001
+          service: order-service
+          resource: "payment-service"
+          span_kind: client
+          duration_ns: 50000000
+          is_error: true
+          peer.service: payment-service
+          envoy.response_flags: "UF"
+          error.message: "upstream connect error or disconnect/reset before headers"
+
+events:
+  - id: 10001
+    title: "Istio: Configuration update pushed"
+    text: |
+      New Istio configuration deployed.
+      
+      Changes:
+      - Enabled access logging (verbose)
+      - Added new retry policy
+    date_happened_offset_minutes: -60
+    source: istio
+    alert_type: info
+    tags:
+      - mesh:istio
+      - config:istio-config
+
+  - id: 10002
+    title: "Alert: Envoy proxy unhealthy"
+    text: "Multiple Envoy sidecars restarting"
+    date_happened_offset_minutes: 2
+    source: datadog
+    alert_type: error
+    tags:
+      - mesh:istio
+
+  - id: 10003
+    title: "Alert: payment-service 503 errors"
+    text: "High 503 error rate for payment-service"
+    date_happened_offset_minutes: 5
+    source: datadog
+    alert_type: error
+    tags:
+      - service:payment-service
+
+expected_rca:
+  root_cause: "Envoy sidecar memory limit too low after config change"
+  contributing_factors:
+    - "Istio config enabled verbose access logging"
+    - "Increased memory usage in Envoy sidecars"
+    - "Sidecar memory limit (512MB) insufficient"
+    - "OOMKilled sidecars cause service mesh failures"
+  recommended_actions:
+    - "Increase Envoy sidecar memory limits to 1GB"
+    - "Review and optimize access logging config"
+    - "Add memory alerts for sidecars"
+    - "Consider Envoy memory trimming settings"
+    - "Test config changes in staging first"

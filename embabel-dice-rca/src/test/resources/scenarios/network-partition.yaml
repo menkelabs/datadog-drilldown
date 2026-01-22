@@ -1,0 +1,345 @@
+# Scenario: Network Partition
+#
+# Root Cause: Network partition between availability zones causing
+# split-brain scenarios and service communication failures.
+
+name: network-partition
+description: >
+  Network partition between AZ-1 and AZ-2 causing service isolation.
+  Services in different AZs cannot communicate, leading to partial outage.
+
+timing:
+  incident_start: "2026-01-27T11:00:00Z"
+  baseline_window_minutes: 30
+  incident_window_minutes: 30
+
+scope:
+  environment: prod
+  affected_zones:
+    - az-1
+    - az-2
+  services:
+    - api-service
+    - order-service
+    - inventory-service
+
+monitor:
+  id: 44444
+  name: "Cross-AZ Network Connectivity"
+  type: metric alert
+  query: "avg(last_5m):avg:network.connectivity{route:az1-to-az2} < 1"
+  message: "Network connectivity between AZ-1 and AZ-2 degraded."
+  tags:
+    - env:prod
+    - team:network
+
+metrics:
+  # Network connectivity
+  - name: network.connectivity
+    type: gauge
+    tags: ["route:az1-to-az2", "env:prod"]
+    baseline:
+      value: 1  # Connected
+    incident:
+      value: 0  # Disconnected
+
+  - name: network.tcp.retransmits
+    type: count
+    tags: ["source_az:az-1", "dest_az:az-2"]
+    baseline:
+      value: 10
+    incident:
+      value: 10000  # Massive retransmits
+
+  - name: network.tcp.connection_timeouts
+    type: count
+    tags: ["source_az:az-1", "dest_az:az-2"]
+    baseline:
+      value: 0
+    incident:
+      value: 5000
+
+  - name: network.packet_loss
+    type: gauge
+    unit: percent
+    tags: ["route:az1-to-az2"]
+    baseline:
+      value: 0.01
+    incident:
+      value: 100  # Total loss
+
+  # Service discovery issues
+  - name: kubernetes.endpoints.ready
+    type: gauge
+    tags: ["service:order-service", "kube_namespace:production"]
+    baseline:
+      value: 6  # 3 per AZ
+    incident:
+      value: 3  # Only local AZ visible
+
+  # Service errors by AZ
+  - name: trace.api-service.request.errors
+    type: count
+    tags: ["service:api-service", "az:az-1", "env:prod"]
+    baseline:
+      value: 5
+    incident:
+      value: 500  # Can't reach AZ-2 services
+
+  - name: trace.api-service.request.errors
+    type: count
+    tags: ["service:api-service", "az:az-2", "env:prod"]
+    baseline:
+      value: 5
+    incident:
+      value: 500  # Can't reach AZ-1 services
+
+  # Database split-brain detection
+  - name: postgresql.replication.delay
+    type: gauge
+    unit: second
+    tags: ["db:orders-db", "role:replica", "az:az-2"]
+    baseline:
+      value: 0.1
+    incident:
+      value: -1  # Connection lost
+
+  - name: postgresql.replication.state
+    type: gauge
+    tags: ["db:orders-db", "role:replica", "az:az-2"]
+    baseline:
+      value: 1  # Streaming
+    incident:
+      value: 0  # Disconnected
+
+  # Load balancer health
+  - name: aws.elb.healthy_host_count
+    type: gauge
+    tags: ["load_balancer:api-alb"]
+    baseline:
+      value: 6
+    incident:
+      value: 3  # Only one AZ healthy per LB
+
+  # Cross-AZ latency (before partition)
+  - name: network.latency.p99
+    type: gauge
+    unit: millisecond
+    tags: ["route:az1-to-az2"]
+    baseline:
+      value: 2
+    incident:
+      value: 5000  # Timeout
+
+logs:
+  baseline:
+    - timestamp_offset_minutes: -20
+      service: api-service
+      status: info
+      message: "Request routed to order-service in az-2"
+
+  incident:
+    # Network detection
+    - timestamp_offset_minutes: 0
+      service: network-monitor
+      status: error
+      message: "Network partition detected between az-1 and az-2"
+      attributes:
+        partition.source: az-1
+        partition.dest: az-2
+        packet_loss_percent: 100
+
+    # Service discovery issues
+    - timestamp_offset_minutes: 1
+      service: api-service
+      host: api-service-az1-001
+      status: error
+      message: "Cannot reach order-service endpoints in az-2"
+      attributes:
+        error.type: NoRouteToHostException
+        target.service: order-service
+        target.az: az-2
+
+    - timestamp_offset_minutes: 1
+      service: kubernetes
+      status: warn
+      message: "Endpoints for order-service reduced: 3 healthy (was 6)"
+      attributes:
+        kubernetes.event.reason: EndpointsReduced
+        kubernetes.service: order-service
+        endpoints.healthy: 3
+        endpoints.unhealthy: 3
+
+    # Database replication
+    - timestamp_offset_minutes: 2
+      service: postgresql
+      host: orders-db-replica-az2
+      status: error
+      message: "Lost connection to primary in az-1"
+      attributes:
+        error.type: ReplicationConnectionLost
+        primary.host: orders-db-primary-az1
+        replication.delay: "unknown"
+
+    - timestamp_offset_minutes: 3
+      service: postgresql
+      status: warn
+      message: "Replica orders-db-replica-az2 promoted to standalone (DANGER: split-brain)"
+      attributes:
+        promoted.host: orders-db-replica-az2
+        promotion.reason: "primary unreachable"
+
+    # Service errors
+    - timestamp_offset_minutes: 5
+      service: api-service
+      host: api-service-az1-001
+      status: error
+      message: "Connection timeout to inventory-service"
+      attributes:
+        error.type: ConnectTimeoutException
+        target.service: inventory-service
+        timeout_ms: 5000
+
+    - timestamp_offset_minutes: 5
+      service: api-service
+      host: api-service-az2-001
+      status: error
+      message: "Connection timeout to order-service"
+      attributes:
+        error.type: ConnectTimeoutException
+        target.service: order-service
+
+    # AWS health check
+    - timestamp_offset_minutes: 5
+      service: aws-alb
+      status: warn
+      message: "Targets in az-2 marked unhealthy from az-1 perspective"
+      attributes:
+        load_balancer: api-alb
+        unhealthy_targets: 3
+        unhealthy_az: az-2
+
+    - timestamp_offset_minutes: 10
+      service: api-service
+      status: warn
+      message: "Failover: routing all traffic to local AZ only"
+      attributes:
+        failover.mode: "az-local"
+        available.az: "az-1"
+
+spans:
+  baseline:
+    - trace_id: trace-api-base-001
+      spans:
+        - span_id: span-api-001
+          service: api-service
+          resource: "POST /orders"
+          span_kind: server
+          duration_ns: 200000000
+          is_error: false
+          az: az-1
+
+        - span_id: span-order-001
+          service: api-service
+          resource: "order-service"
+          span_kind: client
+          duration_ns: 100000000
+          peer.service: order-service
+          peer.az: az-2  # Cross-AZ call
+
+  incident:
+    # Failed cross-AZ call
+    - trace_id: trace-api-inc-001
+      spans:
+        - span_id: span-api-inc-001
+          service: api-service
+          resource: "POST /orders"
+          span_kind: server
+          duration_ns: 5100000000
+          is_error: true
+          http.status_code: 503
+          az: az-1
+
+        - span_id: span-order-inc-001
+          service: api-service
+          resource: "order-service"
+          span_kind: client
+          duration_ns: 5000000000
+          is_error: true
+          peer.service: order-service
+          peer.az: az-2
+          error.type: ConnectTimeoutException
+          error.message: "No route to host"
+
+    # Successful local-AZ call
+    - trace_id: trace-api-inc-002
+      spans:
+        - span_id: span-api-inc-002
+          service: api-service
+          resource: "POST /orders"
+          span_kind: server
+          duration_ns: 150000000
+          is_error: false
+          az: az-1
+
+        - span_id: span-order-inc-002
+          service: api-service
+          resource: "order-service"
+          span_kind: client
+          duration_ns: 80000000
+          peer.service: order-service
+          peer.az: az-1  # Local AZ works
+
+events:
+  - id: 44001
+    title: "Network: Maintenance on az-1/az-2 transit link"
+    text: "Scheduled maintenance on inter-AZ network link"
+    date_happened_offset_minutes: -60
+    source: aws
+    alert_type: info
+    tags:
+      - maintenance:network
+      - affected:az1-az2
+
+  - id: 44002
+    title: "Alert: Network partition detected"
+    text: "Complete packet loss between az-1 and az-2"
+    date_happened_offset_minutes: 0
+    source: datadog
+    alert_type: error
+    tags:
+      - network:partition
+      - route:az1-to-az2
+
+  - id: 44003
+    title: "Alert: Database replication lag critical"
+    text: "Replica in az-2 lost connection to primary"
+    date_happened_offset_minutes: 2
+    source: datadog
+    alert_type: error
+    tags:
+      - db:orders-db
+
+  - id: 44004
+    title: "DANGER: Potential split-brain"
+    text: "Database replica promoted - data divergence risk"
+    date_happened_offset_minutes: 3
+    source: postgresql
+    alert_type: error
+    tags:
+      - db:orders-db
+      - severity:critical
+
+expected_rca:
+  root_cause: "Network partition between AZ-1 and AZ-2 during maintenance"
+  contributing_factors:
+    - "Network maintenance affected transit link"
+    - "No redundant network path between AZs"
+    - "Automatic replica promotion caused split-brain risk"
+    - "Service discovery propagated partial view"
+  recommended_actions:
+    - "Implement multi-path networking between AZs"
+    - "Add network partition detection to prevent auto-promotion"
+    - "Configure services for zone-aware routing"
+    - "Implement proper fencing for database failover"
+    - "Add chaos testing for network partition scenarios"

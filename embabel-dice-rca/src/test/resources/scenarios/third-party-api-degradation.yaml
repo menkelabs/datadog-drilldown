@@ -1,0 +1,380 @@
+# Scenario: Third-Party API Degradation
+#
+# Root Cause: External payment provider experiencing degradation,
+# causing timeouts and failures in checkout flow.
+
+name: third-party-api-degradation
+description: >
+  Third-party payment API (Stripe) experiencing degradation.
+  Increased latency and error rates affecting checkout completion.
+
+timing:
+  incident_start: "2026-01-29T16:00:00Z"
+  baseline_window_minutes: 30
+  incident_window_minutes: 30
+
+scope:
+  service: checkout-service
+  environment: prod
+  third_party: stripe
+  affected_endpoints:
+    - /v1/payment_intents
+    - /v1/charges
+
+monitor:
+  id: 66666
+  name: "Stripe API Error Rate"
+  type: metric alert
+  query: "sum(last_5m):sum:external.api.errors{provider:stripe,env:prod}.as_count() / sum:external.api.requests{provider:stripe,env:prod}.as_count() > 0.1"
+  message: "Stripe API error rate above 10%. Check Stripe status page."
+  tags:
+    - provider:stripe
+    - env:prod
+
+metrics:
+  # External API metrics - KEY INDICATORS
+  - name: external.api.latency
+    type: gauge
+    unit: millisecond
+    tags: ["provider:stripe", "endpoint:/v1/payment_intents"]
+    baseline:
+      value: 200
+      noise: 50
+    incident:
+      pattern: spike
+      value: 15000
+      noise: 5000
+
+  - name: external.api.errors
+    type: count
+    tags: ["provider:stripe", "env:prod"]
+    baseline:
+      value: 5
+    incident:
+      value: 500
+      noise: 100
+
+  - name: external.api.requests
+    type: count
+    tags: ["provider:stripe", "env:prod"]
+    baseline:
+      value: 1000
+    incident:
+      value: 1000  # Same traffic
+
+  - name: external.api.error_rate
+    type: gauge
+    unit: percent
+    tags: ["provider:stripe", "env:prod"]
+    baseline:
+      value: 0.5
+    incident:
+      value: 50  # 50% failing
+
+  # HTTP status codes from Stripe
+  - name: external.api.status
+    type: count
+    tags: ["provider:stripe", "status_code:200"]
+    baseline:
+      value: 990
+    incident:
+      value: 500
+
+  - name: external.api.status
+    type: count
+    tags: ["provider:stripe", "status_code:500"]
+    baseline:
+      value: 2
+    incident:
+      value: 200
+
+  - name: external.api.status
+    type: count
+    tags: ["provider:stripe", "status_code:503"]
+    baseline:
+      value: 0
+    incident:
+      value: 150
+
+  - name: external.api.status
+    type: count
+    tags: ["provider:stripe", "status_code:429"]
+    baseline:
+      value: 5
+    incident:
+      value: 100  # Rate limited
+
+  # Circuit breaker status
+  - name: circuit_breaker.stripe.state
+    type: gauge
+    tags: ["service:checkout-service"]
+    baseline:
+      value: 0  # CLOSED
+    incident:
+      pattern: transitions
+      transitions:
+        - offset_minutes: 5
+          value: 1  # OPEN
+        - offset_minutes: 10
+          value: 2  # HALF_OPEN
+        - offset_minutes: 11
+          value: 1  # OPEN
+
+  # Service metrics
+  - name: trace.checkout-service.request.errors
+    type: count
+    tags: ["service:checkout-service", "env:prod"]
+    baseline:
+      value: 10
+    incident:
+      value: 500
+      noise: 100
+
+  - name: trace.checkout-service.request.duration
+    type: gauge
+    unit: millisecond
+    tags: ["service:checkout-service", "env:prod"]
+    baseline:
+      value: 500
+      noise: 100
+    incident:
+      value: 15000
+      noise: 3000
+
+  # Business metrics
+  - name: business.checkout.success_rate
+    type: gauge
+    unit: percent
+    tags: ["service:checkout-service", "env:prod"]
+    baseline:
+      value: 98
+    incident:
+      value: 45
+
+  - name: business.checkout.abandoned
+    type: count
+    tags: ["service:checkout-service", "reason:payment_failed"]
+    baseline:
+      value: 20
+    incident:
+      value: 500
+
+  # Retry metrics
+  - name: http.client.retries
+    type: count
+    tags: ["service:checkout-service", "target:stripe"]
+    baseline:
+      value: 10
+    incident:
+      value: 2000
+
+logs:
+  baseline:
+    - timestamp_offset_minutes: -20
+      service: checkout-service
+      status: info
+      message: "Payment successful: pi_123456"
+
+  incident:
+    # Initial timeouts
+    - timestamp_offset_minutes: 1
+      service: checkout-service
+      status: error
+      message: "Stripe API timeout: /v1/payment_intents"
+      attributes:
+        error.type: ReadTimeoutException
+        provider: stripe
+        endpoint: "/v1/payment_intents"
+        timeout_ms: 15000
+
+    - timestamp_offset_minutes: 2
+      service: checkout-service
+      status: error
+      message: "HTTP 503 from Stripe: Service Unavailable"
+      attributes:
+        error.type: HttpServerErrorException
+        provider: stripe
+        http.status_code: 503
+        stripe.request_id: "req_abc123"
+
+    - timestamp_offset_minutes: 3
+      service: checkout-service
+      status: warn
+      message: "Stripe API degraded: 40% error rate in last minute"
+      attributes:
+        provider: stripe
+        error_rate_percent: 40
+
+    # Rate limiting
+    - timestamp_offset_minutes: 4
+      service: checkout-service
+      status: warn
+      message: "Stripe rate limit: 429 Too Many Requests"
+      attributes:
+        error.type: RateLimitException
+        provider: stripe
+        http.status_code: 429
+        retry_after_seconds: 60
+
+    # Circuit breaker
+    - timestamp_offset_minutes: 5
+      service: checkout-service
+      status: warn
+      message: "CircuitBreaker 'stripe' state changed: CLOSED -> OPEN"
+      attributes:
+        circuit.name: stripe
+        circuit.state: OPEN
+        circuit.failure_rate: 55
+        circuit.failure_threshold: 50
+
+    # Fallback behavior
+    - timestamp_offset_minutes: 6
+      service: checkout-service
+      status: info
+      message: "Payment deferred: Stripe circuit open, queuing for retry"
+      attributes:
+        payment.status: PENDING
+        payment.queue: payment-retry-queue
+
+    - timestamp_offset_minutes: 10
+      service: checkout-service
+      status: info
+      message: "CircuitBreaker 'stripe' attempting half-open"
+      attributes:
+        circuit.name: stripe
+        circuit.state: HALF_OPEN
+
+    - timestamp_offset_minutes: 11
+      service: checkout-service
+      status: warn
+      message: "CircuitBreaker 'stripe' state changed: HALF_OPEN -> OPEN (still failing)"
+      attributes:
+        circuit.name: stripe
+        circuit.state: OPEN
+
+    # Stripe status
+    - timestamp_offset_minutes: 15
+      service: external-status-monitor
+      status: info
+      message: "Stripe status page: Investigating payment processing delays"
+      attributes:
+        provider: stripe
+        status_page_url: "https://status.stripe.com"
+        incident_status: "investigating"
+
+spans:
+  baseline:
+    - trace_id: trace-checkout-base-001
+      spans:
+        - span_id: span-checkout-001
+          service: checkout-service
+          resource: "POST /checkout"
+          span_kind: server
+          duration_ns: 500000000
+          is_error: false
+
+        - span_id: span-stripe-001
+          service: checkout-service
+          resource: "stripe.payment_intents.create"
+          span_kind: client
+          duration_ns: 200000000
+          peer.service: stripe
+          http.url: "https://api.stripe.com/v1/payment_intents"
+
+  incident:
+    # Timeout
+    - trace_id: trace-checkout-inc-001
+      spans:
+        - span_id: span-checkout-inc-001
+          service: checkout-service
+          resource: "POST /checkout"
+          span_kind: server
+          duration_ns: 15500000000
+          is_error: true
+          http.status_code: 503
+
+        - span_id: span-stripe-inc-001
+          service: checkout-service
+          resource: "stripe.payment_intents.create"
+          span_kind: client
+          duration_ns: 15000000000
+          is_error: true
+          peer.service: stripe
+          error.type: ReadTimeoutException
+          http.status_code: 0  # No response
+
+    # Circuit breaker rejection
+    - trace_id: trace-checkout-inc-002
+      spans:
+        - span_id: span-checkout-inc-002
+          service: checkout-service
+          resource: "POST /checkout"
+          span_kind: server
+          duration_ns: 50000000  # Fast fail
+          is_error: true
+          http.status_code: 503
+
+        - span_id: span-stripe-inc-002
+          service: checkout-service
+          resource: "stripe.payment_intents.create"
+          span_kind: client
+          duration_ns: 1000000  # 1ms - circuit breaker
+          is_error: true
+          peer.service: stripe
+          error.type: CircuitBreakerOpenException
+          error.message: "CircuitBreaker 'stripe' is OPEN"
+
+events:
+  - id: 66001
+    title: "Stripe Status: Investigating payment delays"
+    text: "Stripe is investigating increased error rates and latency"
+    date_happened_offset_minutes: 0
+    source: stripe-status
+    alert_type: warning
+    tags:
+      - provider:stripe
+      - status:investigating
+
+  - id: 66002
+    title: "Alert: Stripe error rate > 10%"
+    text: "Third-party payment API experiencing issues"
+    date_happened_offset_minutes: 3
+    source: datadog
+    alert_type: error
+    tags:
+      - provider:stripe
+
+  - id: 66003
+    title: "Alert: Checkout success rate below 50%"
+    text: "Checkout completion rate critically low"
+    date_happened_offset_minutes: 10
+    source: datadog
+    alert_type: error
+    tags:
+      - service:checkout-service
+
+  - id: 66004
+    title: "Stripe Status: Issue identified"
+    text: "Stripe identified the issue affecting payments API"
+    date_happened_offset_minutes: 20
+    source: stripe-status
+    alert_type: warning
+    tags:
+      - provider:stripe
+      - status:identified
+
+expected_rca:
+  root_cause: "Stripe payment API experiencing degradation"
+  contributing_factors:
+    - "Third-party service issue outside our control"
+    - "Circuit breaker opened to protect against cascading failures"
+    - "No fallback payment provider configured"
+  mitigations_taken:
+    - "Circuit breaker prevented thread exhaustion"
+    - "Payments queued for retry"
+  recommended_actions:
+    - "Monitor Stripe status page for resolution"
+    - "Consider multi-provider payment setup for redundancy"
+    - "Implement async payment processing for better UX"
+    - "Add payment queue processing for recovery"
+    - "Communicate status to affected customers"

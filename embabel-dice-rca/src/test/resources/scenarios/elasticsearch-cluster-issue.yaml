@@ -1,0 +1,360 @@
+# Scenario: Elasticsearch Cluster Issue
+#
+# Root Cause: Elasticsearch cluster experiencing shard allocation issues
+# after node failure, causing search degradation.
+
+name: elasticsearch-cluster-issue
+description: >
+  Elasticsearch cluster health degraded after data node failure.
+  Unassigned shards causing partial search results and timeouts.
+
+timing:
+  incident_start: "2026-01-31T10:00:00Z"
+  baseline_window_minutes: 30
+  incident_window_minutes: 30
+
+scope:
+  service: search-api
+  environment: prod
+  elasticsearch_cluster: search-cluster
+  indices:
+    - products
+    - orders
+    - customers
+
+monitor:
+  id: 88888
+  name: "Elasticsearch Cluster Health"
+  type: metric alert
+  query: "avg(last_5m):avg:elasticsearch.cluster.health.status{cluster_name:search-cluster} > 1"
+  message: "Elasticsearch cluster health is not GREEN. Check node and shard status."
+  tags:
+    - cluster:search-cluster
+    - env:prod
+
+metrics:
+  # Cluster health metrics - KEY INDICATORS
+  - name: elasticsearch.cluster.health.status
+    type: gauge
+    tags: ["cluster_name:search-cluster"]
+    baseline:
+      value: 0  # GREEN
+    incident:
+      value: 2  # RED
+
+  - name: elasticsearch.cluster.health.number_of_nodes
+    type: gauge
+    tags: ["cluster_name:search-cluster"]
+    baseline:
+      value: 5  # 5 data nodes
+    incident:
+      value: 4  # Lost one node
+
+  - name: elasticsearch.cluster.health.active_shards
+    type: gauge
+    tags: ["cluster_name:search-cluster"]
+    baseline:
+      value: 150
+    incident:
+      value: 120  # Some shards missing
+
+  - name: elasticsearch.cluster.health.unassigned_shards
+    type: gauge
+    tags: ["cluster_name:search-cluster"]
+    baseline:
+      value: 0
+    incident:
+      value: 30  # 30 unassigned
+
+  - name: elasticsearch.cluster.health.initializing_shards
+    type: gauge
+    tags: ["cluster_name:search-cluster"]
+    baseline:
+      value: 0
+    incident:
+      value: 5  # Shards trying to recover
+
+  # Index metrics
+  - name: elasticsearch.index.search.query_time
+    type: gauge
+    unit: millisecond
+    tags: ["index:products", "cluster_name:search-cluster"]
+    baseline:
+      value: 50
+      noise: 20
+    incident:
+      value: 5000
+      noise: 2000
+
+  - name: elasticsearch.index.search.query_total
+    type: count
+    tags: ["index:products", "cluster_name:search-cluster"]
+    baseline:
+      value: 10000
+    incident:
+      value: 3000  # Reduced due to failures
+
+  # Timeout and errors
+  - name: elasticsearch.search.timeouts
+    type: count
+    tags: ["cluster_name:search-cluster"]
+    baseline:
+      value: 2
+    incident:
+      value: 500
+
+  - name: elasticsearch.search.failed
+    type: count
+    tags: ["cluster_name:search-cluster"]
+    baseline:
+      value: 5
+    incident:
+      value: 800
+
+  # Node metrics
+  - name: elasticsearch.node.jvm.heap_used_percent
+    type: gauge
+    tags: ["cluster_name:search-cluster", "node:data-node-1"]
+    baseline:
+      value: 65
+    incident:
+      value: 85  # Higher due to rebalancing
+
+  - name: elasticsearch.node.fs.total.available_in_bytes
+    type: gauge
+    tags: ["cluster_name:search-cluster", "node:data-node-1"]
+    baseline:
+      value: 500000000000  # 500GB
+    incident:
+      value: 100000000000  # 100GB - shards relocating
+
+  # Service impact
+  - name: trace.search-api.request.errors
+    type: count
+    tags: ["service:search-api", "env:prod"]
+    baseline:
+      value: 10
+    incident:
+      value: 400
+      noise: 100
+
+  - name: trace.search-api.request.duration
+    type: gauge
+    unit: millisecond
+    tags: ["service:search-api", "env:prod"]
+    baseline:
+      value: 100
+      noise: 30
+    incident:
+      value: 8000
+      noise: 3000
+
+  # Partial results
+  - name: elasticsearch.search.hits.partial
+    type: count
+    tags: ["cluster_name:search-cluster"]
+    baseline:
+      value: 0
+    incident:
+      value: 300  # Partial results returned
+
+logs:
+  baseline:
+    - timestamp_offset_minutes: -20
+      service: search-api
+      status: info
+      message: "Search completed: 250 results in 45ms"
+
+  incident:
+    # Node failure
+    - timestamp_offset_minutes: 0
+      service: elasticsearch
+      host: data-node-3
+      status: error
+      message: "Node leaving cluster: OutOfMemoryError"
+      attributes:
+        node.name: data-node-3
+        node.id: "abc123xyz"
+        error.type: OutOfMemoryError
+        cluster.name: search-cluster
+
+    - timestamp_offset_minutes: 0
+      service: elasticsearch
+      status: warn
+      message: "Cluster health changed: GREEN -> YELLOW"
+      attributes:
+        cluster.name: search-cluster
+        cluster.health: YELLOW
+        unassigned_shards: 15
+
+    - timestamp_offset_minutes: 1
+      service: elasticsearch
+      status: error
+      message: "Cluster health changed: YELLOW -> RED"
+      attributes:
+        cluster.name: search-cluster
+        cluster.health: RED
+        unassigned_shards: 30
+        reason: "Primary shard unavailable"
+
+    # Shard allocation issues
+    - timestamp_offset_minutes: 2
+      service: elasticsearch
+      status: warn
+      message: "Shard allocation failed: not enough disk space on eligible nodes"
+      attributes:
+        shard: "products[15]"
+        reason: "disk threshold exceeded"
+        watermark.high: "90%"
+
+    - timestamp_offset_minutes: 3
+      service: elasticsearch
+      status: warn
+      message: "Search returning partial results: 2 of 5 shards failed"
+      attributes:
+        index: products
+        shards.total: 5
+        shards.successful: 3
+        shards.failed: 2
+
+    # API errors
+    - timestamp_offset_minutes: 5
+      service: search-api
+      status: error
+      message: "Elasticsearch query timeout"
+      attributes:
+        error.type: ElasticsearchTimeoutException
+        query: "smartphone"
+        timeout_ms: 5000
+
+    - timestamp_offset_minutes: 5
+      service: search-api
+      status: warn
+      message: "Returning degraded search results"
+      attributes:
+        results.mode: "partial"
+        shards.unavailable: 2
+        coverage_percent: 60
+
+    - timestamp_offset_minutes: 10
+      service: elasticsearch
+      status: info
+      message: "Shard relocation in progress: products[15] -> data-node-1"
+      attributes:
+        shard: "products[15]"
+        source_node: "data-node-3"
+        target_node: "data-node-1"
+        progress_percent: 25
+
+spans:
+  baseline:
+    - trace_id: trace-search-base-001
+      spans:
+        - span_id: span-search-001
+          service: search-api
+          resource: "GET /search"
+          span_kind: server
+          duration_ns: 100000000
+          is_error: false
+
+        - span_id: span-es-001
+          service: search-api
+          resource: "elasticsearch.search"
+          span_kind: client
+          duration_ns: 50000000
+          peer.service: elasticsearch
+          elasticsearch.index: products
+
+  incident:
+    # Partial results
+    - trace_id: trace-search-inc-001
+      spans:
+        - span_id: span-search-inc-001
+          service: search-api
+          resource: "GET /search"
+          span_kind: server
+          duration_ns: 5100000000
+          is_error: false
+          search.partial_results: true
+
+        - span_id: span-es-inc-001
+          service: search-api
+          resource: "elasticsearch.search"
+          span_kind: client
+          duration_ns: 5000000000
+          peer.service: elasticsearch
+          elasticsearch.shards_successful: 3
+          elasticsearch.shards_total: 5
+
+    # Timeout
+    - trace_id: trace-search-inc-002
+      spans:
+        - span_id: span-search-inc-002
+          service: search-api
+          resource: "GET /search"
+          span_kind: server
+          duration_ns: 5000000000
+          is_error: true
+          http.status_code: 504
+
+        - span_id: span-es-inc-002
+          service: search-api
+          resource: "elasticsearch.search"
+          span_kind: client
+          duration_ns: 5000000000
+          is_error: true
+          peer.service: elasticsearch
+          error.type: ElasticsearchTimeoutException
+
+events:
+  - id: 88001
+    title: "Elasticsearch: data-node-3 left cluster"
+    text: "Data node left cluster due to OOM error"
+    date_happened_offset_minutes: 0
+    source: elasticsearch
+    alert_type: error
+    tags:
+      - cluster:search-cluster
+      - node:data-node-3
+
+  - id: 88002
+    title: "Alert: Elasticsearch cluster RED"
+    text: "Cluster health degraded to RED"
+    date_happened_offset_minutes: 1
+    source: datadog
+    alert_type: error
+    tags:
+      - cluster:search-cluster
+
+  - id: 88003
+    title: "Alert: search-api error rate elevated"
+    text: "Search API experiencing high error rate"
+    date_happened_offset_minutes: 5
+    source: datadog
+    alert_type: error
+    tags:
+      - service:search-api
+
+  - id: 88004
+    title: "Elasticsearch: Shard recovery started"
+    text: "Automatic shard recovery initiated"
+    date_happened_offset_minutes: 10
+    source: elasticsearch
+    alert_type: info
+    tags:
+      - cluster:search-cluster
+
+expected_rca:
+  root_cause: "Elasticsearch data-node-3 failed due to OOM"
+  contributing_factors:
+    - "Node JVM heap exhausted during heavy indexing"
+    - "Primary shards became unavailable (cluster RED)"
+    - "Disk watermarks preventing shard allocation on remaining nodes"
+    - "Single replica not enough for node failure"
+  recommended_actions:
+    - "Restart or replace data-node-3"
+    - "Increase disk space on remaining nodes"
+    - "Clear disk watermarks temporarily if safe"
+    - "Increase replica count to 2"
+    - "Add more data nodes for better resilience"
+    - "Increase JVM heap on data nodes"

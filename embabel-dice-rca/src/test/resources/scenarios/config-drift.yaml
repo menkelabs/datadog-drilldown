@@ -1,0 +1,336 @@
+# Scenario: Configuration Drift / Misconfiguration
+#
+# Root Cause: Configuration change deployed to some pods but not others,
+# causing inconsistent behavior and intermittent failures.
+
+name: config-drift
+description: >
+  Configuration drift between pods causing intermittent failures.
+  A ConfigMap update didn't propagate to all pods due to missed restart.
+
+timing:
+  incident_start: "2026-02-01T14:00:00Z"
+  baseline_window_minutes: 30
+  incident_window_minutes: 30
+
+scope:
+  service: order-service
+  environment: prod
+  namespace: production
+  config_source: order-service-config
+
+monitor:
+  id: 99999
+  name: "Order Service Intermittent Errors"
+  type: metric alert
+  query: "avg(last_5m):sum:trace.order-service.request.errors{env:prod}.as_count() / sum:trace.order-service.request.hits{env:prod}.as_count() > 0.1"
+  message: "Order service error rate above 10%. Check for configuration issues."
+  tags:
+    - service:order-service
+    - env:prod
+
+metrics:
+  # Error rate by pod
+  - name: trace.order-service.request.errors
+    type: count
+    tags: ["service:order-service", "pod:order-service-abc12"]
+    baseline:
+      value: 1
+    incident:
+      value: 0  # This pod has new config - works
+
+  - name: trace.order-service.request.errors
+    type: count
+    tags: ["service:order-service", "pod:order-service-def34"]
+    baseline:
+      value: 1
+    incident:
+      value: 200  # This pod has OLD config - failing
+
+  - name: trace.order-service.request.errors
+    type: count
+    tags: ["service:order-service", "pod:order-service-ghi56"]
+    baseline:
+      value: 1
+    incident:
+      value: 200  # This pod has OLD config - failing
+
+  # Aggregated error rate
+  - name: trace.order-service.request.errors
+    type: count
+    tags: ["service:order-service", "env:prod"]
+    baseline:
+      value: 5
+    incident:
+      value: 400  # 2/3 pods failing
+      noise: 50
+
+  # Success rate varies dramatically
+  - name: app.order.success_rate
+    type: gauge
+    unit: percent
+    tags: ["service:order-service", "pod:order-service-abc12"]
+    baseline:
+      value: 99
+    incident:
+      value: 99  # Good
+
+  - name: app.order.success_rate
+    type: gauge
+    unit: percent
+    tags: ["service:order-service", "pod:order-service-def34"]
+    baseline:
+      value: 99
+    incident:
+      value: 30  # Bad - old config
+
+  # Configuration version metric
+  - name: app.config.version
+    type: gauge
+    tags: ["service:order-service", "pod:order-service-abc12"]
+    baseline:
+      value: 1
+    incident:
+      value: 2  # New config
+
+  - name: app.config.version
+    type: gauge
+    tags: ["service:order-service", "pod:order-service-def34"]
+    baseline:
+      value: 1
+    incident:
+      value: 1  # OLD config!
+
+  # Database connection config issue
+  - name: jvm.db.pool.errors
+    type: count
+    tags: ["service:order-service", "pod:order-service-def34"]
+    baseline:
+      value: 0
+    incident:
+      value: 200  # Can't connect with old creds
+
+  - name: jvm.db.pool.errors
+    type: count
+    tags: ["service:order-service", "pod:order-service-abc12"]
+    baseline:
+      value: 0
+    incident:
+      value: 0  # Works fine
+
+  # Pod uptime (showing pods not restarted)
+  - name: kubernetes.pod.uptime
+    type: gauge
+    unit: second
+    tags: ["kube_deployment:order-service", "pod:order-service-abc12"]
+    baseline:
+      value: 86400  # 1 day
+    incident:
+      value: 1800  # 30 min - restarted with new config
+
+  - name: kubernetes.pod.uptime
+    type: gauge
+    unit: second
+    tags: ["kube_deployment:order-service", "pod:order-service-def34"]
+    baseline:
+      value: 86400
+    incident:
+      value: 604800  # 7 days - never restarted
+
+logs:
+  baseline:
+    - timestamp_offset_minutes: -20
+      service: order-service
+      status: info
+      message: "Order created successfully: ORD-12345"
+
+  incident:
+    # ConfigMap updated
+    - timestamp_offset_minutes: -30
+      service: kubernetes
+      status: info
+      message: "ConfigMap order-service-config updated"
+      attributes:
+        kubernetes.event.reason: ConfigMapUpdated
+        configmap.name: order-service-config
+        configmap.namespace: production
+        changes: "database.host changed"
+
+    # Only one pod restarted
+    - timestamp_offset_minutes: -25
+      service: kubernetes
+      status: info
+      message: "Pod order-service-abc12 restarted"
+      attributes:
+        kubernetes.event.reason: Restarted
+        kubernetes.pod.name: order-service-abc12
+        restart.reason: "Manual rollout"
+
+    # Errors from old-config pods
+    - timestamp_offset_minutes: 1
+      service: order-service
+      host: order-service-def34
+      status: error
+      message: "PSQLException: Connection refused to orders-db-old.prod.svc"
+      attributes:
+        error.type: PSQLException
+        error.message: "Connection refused"
+        db.host: orders-db-old.prod.svc
+        db.host_expected: orders-db-new.prod.svc
+
+    - timestamp_offset_minutes: 2
+      service: order-service
+      host: order-service-ghi56
+      status: error
+      message: "PSQLException: Connection refused to orders-db-old.prod.svc"
+      attributes:
+        error.type: PSQLException
+        db.host: orders-db-old.prod.svc
+
+    # Successful from new-config pod
+    - timestamp_offset_minutes: 2
+      service: order-service
+      host: order-service-abc12
+      status: info
+      message: "Order created successfully: ORD-12346"
+      attributes:
+        db.host: orders-db-new.prod.svc
+
+    # Pattern detected
+    - timestamp_offset_minutes: 10
+      service: order-service
+      status: warn
+      message: "Inconsistent error pattern detected across pods"
+      attributes:
+        pods.with_errors:
+          - order-service-def34
+          - order-service-ghi56
+        pods.without_errors:
+          - order-service-abc12
+
+    # Config diff detected
+    - timestamp_offset_minutes: 15
+      service: config-checker
+      status: warn
+      message: "Configuration drift detected: pods using different config versions"
+      attributes:
+        config.new_version_pods: 1
+        config.old_version_pods: 2
+        config.diff_key: "database.host"
+        config.new_value: "orders-db-new.prod.svc"
+        config.old_value: "orders-db-old.prod.svc"
+
+spans:
+  baseline:
+    - trace_id: trace-order-base-001
+      spans:
+        - span_id: span-order-001
+          service: order-service
+          resource: "POST /orders"
+          span_kind: server
+          duration_ns: 100000000
+          is_error: false
+          kubernetes.pod.name: order-service-def34
+
+  incident:
+    # Request to pod with OLD config - fails
+    - trace_id: trace-order-inc-001
+      spans:
+        - span_id: span-order-inc-001
+          service: order-service
+          resource: "POST /orders"
+          span_kind: server
+          duration_ns: 5100000000
+          is_error: true
+          http.status_code: 500
+          kubernetes.pod.name: order-service-def34
+
+        - span_id: span-db-inc-001
+          service: order-service
+          resource: "INSERT INTO orders"
+          span_kind: client
+          duration_ns: 5000000000
+          is_error: true
+          peer.service: postgres
+          db.host: orders-db-old.prod.svc
+          error.type: PSQLException
+          error.message: "Connection refused"
+
+    # Request to pod with NEW config - succeeds
+    - trace_id: trace-order-inc-002
+      spans:
+        - span_id: span-order-inc-002
+          service: order-service
+          resource: "POST /orders"
+          span_kind: server
+          duration_ns: 100000000
+          is_error: false
+          kubernetes.pod.name: order-service-abc12
+
+        - span_id: span-db-inc-002
+          service: order-service
+          resource: "INSERT INTO orders"
+          span_kind: client
+          duration_ns: 20000000
+          peer.service: postgres
+          db.host: orders-db-new.prod.svc
+
+events:
+  - id: 99001
+    title: "Config Update: order-service-config"
+    text: |
+      ConfigMap updated with new database endpoint.
+      
+      Changed:
+      - database.host: orders-db-old.prod.svc -> orders-db-new.prod.svc
+      
+      Note: Requires pod restart to take effect
+    date_happened_offset_minutes: -30
+    source: kubectl
+    alert_type: info
+    tags:
+      - service:order-service
+      - config:order-service-config
+      - type:config_change
+
+  - id: 99002
+    title: "Partial rollout: order-service"
+    text: "Only 1 of 3 pods restarted after config change"
+    date_happened_offset_minutes: -25
+    source: kubernetes
+    alert_type: warning
+    tags:
+      - service:order-service
+      - rollout:partial
+
+  - id: 99003
+    title: "Alert: order-service error rate > 10%"
+    text: "Intermittent errors detected"
+    date_happened_offset_minutes: 5
+    source: datadog
+    alert_type: error
+    tags:
+      - service:order-service
+
+  - id: 99004
+    title: "Database: orders-db-old decommissioned"
+    text: "Old database endpoint no longer accepting connections"
+    date_happened_offset_minutes: 0
+    source: operations
+    alert_type: info
+    tags:
+      - db:orders-db-old
+
+expected_rca:
+  root_cause: "ConfigMap update not propagated to all pods"
+  contributing_factors:
+    - "ConfigMap updated but pods not restarted"
+    - "Only 1/3 pods manually restarted"
+    - "Old database (orders-db-old) decommissioned"
+    - "2/3 pods still pointing to old database"
+  recommended_actions:
+    - "Restart all order-service pods immediately"
+    - "Implement Reloader or similar for auto-restart on ConfigMap change"
+    - "Add config version metric for drift detection"
+    - "Use rolling deployment with configmap hash annotation"
+    - "Add pre-decommission checks for config references"

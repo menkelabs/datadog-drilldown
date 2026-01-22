@@ -1,0 +1,328 @@
+# Scenario: DNS Resolution Failure
+#
+# Root Cause: CoreDNS pods overwhelmed or failing, causing intermittent
+# DNS resolution failures for service discovery.
+
+name: dns-resolution-failure
+description: >
+  DNS resolution failures causing intermittent service connectivity issues.
+  CoreDNS pods are overwhelmed by query volume.
+
+timing:
+  incident_start: "2026-01-23T16:00:00Z"
+  baseline_window_minutes: 30
+  incident_window_minutes: 30
+
+scope:
+  environment: prod
+  namespace: kube-system
+  affected_services:
+    - api-gateway
+    - order-service
+    - payment-service
+
+monitor:
+  id: 90123
+  name: "DNS Resolution Errors"
+  type: metric alert
+  query: "sum(last_5m):sum:dns.lookup.errors{env:prod}.as_count() > 100"
+  message: "High DNS resolution error rate. Check CoreDNS health."
+  tags:
+    - env:prod
+    - team:platform
+
+metrics:
+  # DNS metrics
+  - name: dns.lookup.errors
+    type: count
+    tags: ["env:prod"]
+    baseline:
+      value: 2
+    incident:
+      pattern: spike
+      value: 500
+      noise: 100
+
+  - name: dns.lookup.latency
+    type: gauge
+    unit: millisecond
+    tags: ["env:prod"]
+    baseline:
+      value: 2
+      noise: 1
+    incident:
+      value: 500
+      noise: 200
+
+  - name: dns.lookup.success
+    type: count
+    tags: ["env:prod"]
+    baseline:
+      value: 10000
+    incident:
+      value: 8000  # 20% failure rate
+
+  # CoreDNS metrics
+  - name: coredns.dns.request.count
+    type: count
+    tags: ["kube_deployment:coredns"]
+    baseline:
+      value: 10000
+    incident:
+      value: 50000  # 5x spike
+
+  - name: coredns.dns.request.duration.seconds
+    type: gauge
+    tags: ["kube_deployment:coredns"]
+    baseline:
+      value: 0.002
+    incident:
+      value: 0.5
+
+  - name: coredns.cache.hits
+    type: count
+    tags: ["kube_deployment:coredns"]
+    baseline:
+      value: 9000
+    incident:
+      value: 5000  # Cache less effective
+
+  # CoreDNS pod resources
+  - name: kubernetes.cpu.usage.total
+    type: gauge
+    unit: millicores
+    tags: ["kube_deployment:coredns", "kube_namespace:kube-system"]
+    baseline:
+      value: 50
+    incident:
+      value: 500  # 10x increase
+
+  - name: kubernetes.memory.usage
+    type: gauge
+    unit: byte
+    tags: ["kube_deployment:coredns", "kube_namespace:kube-system"]
+    baseline:
+      value: 100000000  # 100MB
+    incident:
+      value: 400000000  # 400MB
+
+  # Service errors due to DNS
+  - name: trace.api-gateway.request.errors
+    type: count
+    tags: ["service:api-gateway", "env:prod", "error.type:UnknownHostException"]
+    baseline:
+      value: 0
+    incident:
+      value: 200
+      noise: 50
+
+  - name: trace.order-service.request.errors
+    type: count
+    tags: ["service:order-service", "env:prod", "error.type:UnknownHostException"]
+    baseline:
+      value: 0
+    incident:
+      value: 150
+      noise: 40
+
+  # Connection establishment latency
+  - name: app.http.client.connection.time
+    type: gauge
+    unit: millisecond
+    tags: ["service:api-gateway"]
+    baseline:
+      value: 10
+      noise: 5
+    incident:
+      pattern: bimodal
+      value_fast: 10
+      value_slow: 5000  # DNS timeout
+      slow_ratio: 0.2
+
+logs:
+  baseline:
+    - timestamp_offset_minutes: -20
+      service: api-gateway
+      status: info
+      message: "Request forwarded to order-service"
+
+  incident:
+    - timestamp_offset_minutes: 1
+      service: api-gateway
+      status: error
+      message: "UnknownHostException: order-service.production.svc.cluster.local"
+      attributes:
+        error.type: UnknownHostException
+        dns.query: "order-service.production.svc.cluster.local"
+        dns.type: A
+
+    - timestamp_offset_minutes: 2
+      service: api-gateway
+      status: error
+      message: "DNS resolution timeout after 5000ms"
+      attributes:
+        error.type: DnsTimeoutException
+        dns.query: "payment-service.production.svc.cluster.local"
+        timeout_ms: 5000
+
+    - timestamp_offset_minutes: 3
+      service: order-service
+      status: error
+      message: "Failed to resolve: inventory-service.production.svc.cluster.local"
+      attributes:
+        error.type: UnknownHostException
+
+    - timestamp_offset_minutes: 5
+      service: coredns
+      host: coredns-5d78c9869d-abc12
+      status: warn
+      message: "High query rate: 5000 queries/second"
+      attributes:
+        queries_per_second: 5000
+        cache_hit_ratio: 0.5
+
+    - timestamp_offset_minutes: 5
+      service: kubernetes
+      status: warn
+      message: "CoreDNS pod CPU usage high: 95%"
+      attributes:
+        kubernetes.event.reason: HighCPUUsage
+        kubernetes.pod.name: coredns-5d78c9869d-abc12
+
+    - timestamp_offset_minutes: 10
+      service: coredns
+      status: error
+      message: "Query dropped: queue full"
+      attributes:
+        error.type: QueueFull
+        dropped_queries: 500
+
+    - timestamp_offset_minutes: 15
+      service: api-gateway
+      status: warn
+      message: "Circuit breaker OPEN for order-service due to DNS failures"
+      attributes:
+        circuit.name: order-service
+        circuit.state: OPEN
+        circuit.failure_reason: "UnknownHostException"
+
+spans:
+  baseline:
+    - trace_id: trace-api-base-001
+      spans:
+        - span_id: span-api-001
+          service: api-gateway
+          resource: "POST /orders"
+          span_kind: server
+          duration_ns: 200000000
+          is_error: false
+
+        - span_id: span-order-001
+          service: api-gateway
+          resource: "order-service"
+          span_kind: client
+          duration_ns: 100000000
+          peer.service: order-service
+
+  incident:
+    # Request with DNS timeout
+    - trace_id: trace-api-inc-001
+      spans:
+        - span_id: span-api-inc-001
+          service: api-gateway
+          resource: "POST /orders"
+          span_kind: server
+          duration_ns: 5200000000
+          is_error: true
+          http.status_code: 503
+
+        - span_id: span-order-inc-001
+          service: api-gateway
+          resource: "order-service"
+          span_kind: client
+          duration_ns: 5000000000
+          is_error: true
+          peer.service: order-service
+          error.type: UnknownHostException
+          error.message: "DNS resolution failed"
+
+    # Request that succeeded after retry
+    - trace_id: trace-api-inc-002
+      spans:
+        - span_id: span-api-inc-002
+          service: api-gateway
+          resource: "POST /orders"
+          span_kind: server
+          duration_ns: 800000000  # Slow due to DNS retry
+          is_error: false
+
+        - span_id: span-dns-retry-001
+          service: api-gateway
+          resource: "dns.resolve"
+          span_kind: internal
+          duration_ns: 500000000
+          is_error: false
+          dns.retries: 2
+
+        - span_id: span-order-inc-002
+          service: api-gateway
+          resource: "order-service"
+          span_kind: client
+          duration_ns: 100000000
+          peer.service: order-service
+
+events:
+  - id: 9001
+    title: "Deployment: monitoring-agent v2.0.0"
+    text: |
+      Deployed new monitoring agent across all pods.
+      
+      Note: Agent performs frequent DNS lookups for metric endpoints
+    date_happened_offset_minutes: -15
+    source: deploy
+    alert_type: info
+    tags:
+      - service:monitoring-agent
+      - version:2.0.0
+
+  - id: 9002
+    title: "Alert: DNS resolution errors > 100"
+    text: "High DNS error rate detected"
+    date_happened_offset_minutes: 2
+    source: datadog
+    alert_type: error
+    tags:
+      - env:prod
+
+  - id: 9003
+    title: "Alert: CoreDNS CPU > 90%"
+    text: "CoreDNS pods under heavy load"
+    date_happened_offset_minutes: 5
+    source: datadog
+    alert_type: warning
+    tags:
+      - kube_deployment:coredns
+
+  - id: 9004
+    title: "Kubernetes: CoreDNS HPA triggered"
+    text: "Scaling CoreDNS from 2 to 4 replicas"
+    date_happened_offset_minutes: 10
+    source: kubernetes
+    alert_type: info
+    tags:
+      - kube_deployment:coredns
+      - hpa:coredns-hpa
+
+expected_rca:
+  root_cause: "Monitoring agent v2.0.0 causing DNS query explosion"
+  contributing_factors:
+    - "New agent makes DNS lookup per metric scrape"
+    - "5x increase in DNS queries"
+    - "CoreDNS unable to handle load"
+    - "Cascade effect on all services needing DNS"
+  recommended_actions:
+    - "Roll back monitoring-agent to v1.x"
+    - "Fix monitoring agent to cache DNS results"
+    - "Scale CoreDNS replicas"
+    - "Implement DNS caching at node level (NodeLocal DNSCache)"
+    - "Add circuit breakers for DNS failures"
