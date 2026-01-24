@@ -1,6 +1,9 @@
 # Build output
 target/
 
+# Test reports (local only; H2 DB, analysis-suggestions-*.md, test-report-*)
+test-reports/
+
 # IDE files
 .idea/
 *.iml
