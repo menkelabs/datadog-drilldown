@@ -19,28 +19,32 @@ body {
     background: var(--bg);
     color: var(--text);
     margin: 0;
-    padding: 1.5rem;
-    line-height: 1.5;
+    padding: 0.5rem 1rem;
+    line-height: 1.4;
 }
 
 header {
-    margin-bottom: 2rem;
+    margin-bottom: 0.5rem;
+    display: flex;
+    align-items: baseline;
+    gap: 1rem;
 }
 
 header h1 {
-    font-size: 1.5rem;
-    margin: 0 0 0.25rem 0;
+    font-size: 1.1rem;
+    margin: 0;
 }
 
 header p {
     color: var(--muted);
     margin: 0;
+    font-size: 0.8rem;
 }
 
 .main-layout {
     display: grid;
-    grid-template-columns: 1fr 500px;
-    gap: 1.5rem;
+    grid-template-columns: 1fr 420px;
+    gap: 1rem;
     max-width: 1600px;
 }
 
@@ -48,24 +52,39 @@ header p {
     min-width: 0;
 }
 
-.logs-panel {
+.side-panels {
     position: sticky;
-    top: 1.5rem;
-    height: calc(100vh - 3rem);
-    overflow-y: auto;
+    top: 0.5rem;
+    height: calc(100vh - 1rem);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
 }
 
-.logs-panel .card {
-    height: 100%;
+.side-panels .card {
     display: flex;
     flex-direction: column;
     margin-bottom: 0;
+    min-height: 0;
+    overflow: hidden;
+}
+
+/* Logs card uses inline styles for reliability */
+.side-panels .logs-card h2 {
+    margin: 0 0 0.75rem 0;
+}
+
+.side-panels .analysis-panel {
+    flex: 1 1 auto;
+    min-height: 200px;
+    overflow: hidden;
 }
 
 .log-controls {
     display: flex;
     gap: 0.5rem;
-    margin-bottom: 0.75rem;
+    margin-bottom: 0.5rem;
 }
 
 .log-controls select {
@@ -78,18 +97,14 @@ header p {
 }
 
 .log-content {
-    flex: 1;
-    overflow-y: auto;
     font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
     font-size: 0.8rem;
     line-height: 1.4;
     padding: 0.75rem;
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: 4px;
     white-space: pre-wrap;
     word-wrap: break-word;
     color: var(--text);
+    display: block;
 }
 
 .log-content:empty::before {
@@ -98,33 +113,151 @@ header p {
     font-style: italic;
 }
 
+.analysis-controls {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.analysis-controls select {
+    flex: 1;
+    padding: 0.4rem 0.6rem;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+}
+
+.analysis-controls button {
+    padding: 0.4rem 0.6rem;
+}
+
+.suggestions-content {
+    flex: 1;
+    min-height: 0;
+    overflow-x: auto;
+    overflow-y: auto;
+    font-size: 0.85rem;
+    line-height: 1.5;
+    padding: 0.75rem;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+}
+
+.suggestions-content:empty::before {
+    content: "No analysis suggestions. Run tests to generate run-*-analysis.md.";
+    color: var(--muted);
+    font-style: italic;
+}
+
+.suggestions-content.loading::before {
+    content: "Loading…";
+    color: var(--muted);
+    font-style: italic;
+}
+
+.suggestions-content h1,
+.suggestions-content h2,
+.suggestions-content h3 {
+    margin: 1rem 0 0.5rem 0;
+    color: var(--text);
+}
+
+.suggestions-content h1 {
+    font-size: 1.1rem;
+}
+
+.suggestions-content h2 {
+    font-size: 1rem;
+}
+
+.suggestions-content h3 {
+    font-size: 0.95rem;
+}
+
+.suggestions-content ul,
+.suggestions-content ol {
+    margin: 0.5rem 0;
+    padding-left: 1.5rem;
+}
+
+.suggestions-content table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0.5rem 0;
+    font-size: 0.8rem;
+}
+
+.suggestions-content th,
+.suggestions-content td {
+    text-align: left;
+    padding: 0.35rem 0.5rem;
+    border: 1px solid var(--border);
+}
+
+.suggestions-content th {
+    color: var(--muted);
+    font-weight: 500;
+}
+
+.suggestions-content code {
+    background: var(--surface);
+    padding: 0.1rem 0.3rem;
+    border-radius: 3px;
+    font-size: 0.9em;
+}
+
+.suggestions-content .error-msg,
+.suggestions-content .muted-msg {
+    margin: 0;
+    color: var(--muted);
+}
+
+.suggestions-content .error-msg {
+    color: var(--error);
+}
+
 @media (max-width: 1200px) {
     .main-layout {
         grid-template-columns: 1fr;
     }
 
-    .logs-panel {
+    .side-panels {
         position: static;
         height: auto;
-        max-height: 600px;
+        max-height: none;
+        overflow: visible;
     }
 }
 
 .card {
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 1.25rem;
-    margin-bottom: 1.25rem;
+    border-radius: 6px;
+    padding: 0.5rem 0.75rem;
+    margin-bottom: 0.5rem;
 }
 
 .card h2 {
-    font-size: 1.1rem;
-    margin: 0 0 1rem 0;
+    font-size: 0.95rem;
+    margin: 0 0 0.35rem 0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.refresh-btn {
+    padding: 0.15rem 0.4rem;
+    font-size: 0.8rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
 }
 
 .form-group {
-    margin-bottom: 0.75rem;
+    margin-bottom: 0.5rem;
 }
 
 .form-row {
@@ -136,7 +269,7 @@ header p {
 }
 
 .form-row label {
-    min-width: 140px;
+    min-width: auto;
 }
 
 .form-row input[type="text"],
@@ -170,13 +303,14 @@ header p {
 }
 
 button {
-    padding: 0.5rem 1rem;
+    padding: 0.35rem 0.75rem;
     background: var(--accent);
     color: #fff;
     border: none;
-    border-radius: 6px;
+    border-radius: 4px;
     cursor: pointer;
     font-weight: 500;
+    font-size: 0.85rem;
 }
 
 button:hover {
@@ -212,9 +346,10 @@ button:disabled {
 }
 
 .status {
-    margin-top: 0.75rem;
-    padding: 0.5rem;
+    margin-top: 0.5rem;
+    padding: 0.35rem 0.5rem;
     border-radius: 4px;
+    font-size: 0.85rem;
 }
 
 .status.info {
@@ -234,7 +369,7 @@ button:disabled {
 
 .summary,
 .runs-list {
-    font-size: 0.9rem;
+    font-size: 0.8rem;
 }
 
 .runs-list table {
@@ -245,7 +380,7 @@ button:disabled {
 .runs-list th,
 .runs-list td {
     text-align: left;
-    padding: 0.4rem 0.6rem;
+    padding: 0.25rem 0.4rem;
     border-bottom: 1px solid var(--border);
 }
 
@@ -273,7 +408,7 @@ button:disabled {
 }
 
 .results {
-    margin-top: 0.75rem;
+    margin-top: 0.5rem;
 }
 
 .results pre {
@@ -282,4 +417,81 @@ button:disabled {
     padding: 0.75rem;
     background: var(--bg);
     border-radius: 4px;
+}
+
+/* Database & logs admin */
+.admin-card .admin-hint {
+    font-size: 0.8rem;
+    color: var(--muted);
+    margin: 0 0 0.5rem 0;
+}
+
+.admin-card .admin-hint code {
+    background: var(--bg);
+    padding: 0.15rem 0.35rem;
+    border-radius: 3px;
+    font-size: 0.9em;
+}
+
+.admin-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.admin-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.admin-row label {
+    margin: 0;
+}
+
+.admin-row input[type="datetime-local"] {
+    padding: 0.4rem 0.6rem;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+}
+
+.admin-row input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+    filter: invert(1);
+}
+
+.danger-btn {
+    background: var(--error);
+    color: #fff;
+}
+
+.danger-btn:hover {
+    opacity: 0.9;
+}
+
+.admin-status {
+    margin-top: 0.5rem;
+    padding: 0.35rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.85rem;
+}
+
+.admin-status.ok {
+    background: rgba(63, 185, 80, 0.15);
+    color: var(--success);
+}
+
+.admin-status.err {
+    background: rgba(248, 81, 73, 0.15);
+    color: var(--error);
+}
+
+.hidden-by-mode {
+    display: none;
+}
+
+.clear-logs-row.show-before .hidden-by-mode {
+    display: inline-block;
 }

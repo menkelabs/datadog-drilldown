@@ -54,6 +54,7 @@ class TestReportCollector(private val h2Store: H2TestReportStore? = H2TestReport
                 Instant.now()
                         .atZone(java.time.ZoneId.systemDefault())
                         .format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"))
+        val runId = System.getenv("TEST_RUN_ID") ?: "run-${Instant.now().epochSecond}"
 
         // Generate JSON report
         val jsonFile = File(dir, "test-report-$timestamp.json")
@@ -70,11 +71,12 @@ class TestReportCollector(private val h2Store: H2TestReportStore? = H2TestReport
         generator.generateHtmlReport(reports, htmlFile)
         logger.info("Generated HTML report: ${htmlFile.absolutePath}")
 
-        // Run analysis and write suggestions
+        // Run analysis and write suggestions (include per-test actual LLM output vs expected).
+        // Use {runId}-analysis.md so the key matches runs/logs; runId is the base, -analysis the type.
         val analyzer = TestResultAnalyzer()
         val analysisResult = analyzer.analyze(reports)
-        val analysisFile = File(dir, "analysis-suggestions-$timestamp.md")
-        analysisFile.writeText(analyzer.formatAsMarkdown(analysisResult))
+        val analysisFile = File(dir, "$runId-analysis.md")
+        analysisFile.writeText(analyzer.formatAsMarkdown(analysisResult, reports))
         logger.info(
                 "Generated analysis: ${analysisFile.absolutePath} (${analysisResult.suggestions.size} suggestions)"
         )
@@ -140,7 +142,7 @@ class TestReportCollector(private val h2Store: H2TestReportStore? = H2TestReport
                         )
                     }
                     appendLine()
-                    appendLine("See analysis-suggestions-*.md in test-reports for full analysis.")
+                    appendLine("See run-*-analysis.md (or analysis-suggestions-*.md) in test-reports for full analysis.")
                 }
             }
         }

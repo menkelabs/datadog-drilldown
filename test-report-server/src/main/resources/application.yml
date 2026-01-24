@@ -13,7 +13,7 @@ spring:
     password: ""
 
 # Path to run-tests-with-server.sh and project root (relative to workspace root)
-# Override via env: PROJECT_ROOT, EMBABEL_DICE_RCA_DIR
+# Override via env: PROJECT_ROOT, EMBABEL_DICE_RCA_SCRIPT
 run-tests:
   project-root: ${PROJECT_ROOT:..}
   script-path: ${EMBABEL_DICE_RCA_SCRIPT:}

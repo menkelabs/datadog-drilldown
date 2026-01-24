@@ -1,7 +1,7 @@
 # Build output
 target/
 
-# Test reports (local only; H2 DB, analysis-suggestions-*.md, test-report-*)
+# Test reports (local only; H2 DB, run-*-analysis.md, analysis-suggestions-*.md, test-report-*)
 test-reports/
 
 # IDE files

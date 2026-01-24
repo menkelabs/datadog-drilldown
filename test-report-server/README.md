@@ -41,5 +41,13 @@ When the UI runs tests, the server sets `TEST_RUN_ID` and `TEST_REPORT_DB_PATH` 
 - `GET /api/runs/{id}` — run detail by row id
 - `GET /api/runs/runId/{runId}` — all rows for a run
 - `GET /api/analysis/summary` — global summary
+- `GET /api/analysis/suggestions` — latest and all `run-*-analysis.md` / `analysis-suggestions-*.md` contents
 - `POST /api/tests/run` — start a test run (body: `{ "pattern": "", "verbose": false }`)
 - `GET /api/tests/run/{runId}/status` — running flag for a run
+- `GET /api/tests/run/{runId}/log?tailLines=500` — tail of test run log
+
+**Admin (database & logs):**
+
+- `POST /api/admin/reset-db` — body `{ "clearLogs": boolean }`. Delete all `test_runs`; if `clearLogs`, also delete all `test-run-*.log` and analysis files (`run-*-analysis.md`, `analysis-suggestions-*.md`) in test-reports.
+- `POST /api/admin/purge-before` — body `{ "before": "ISO8601", "clearLogs": boolean }`. Delete rows with `started_at < before`; if `clearLogs`, also delete log and analysis files with `lastModified < before`.
+- `POST /api/admin/clear-logs` — body `{ "before": "ISO8601" | null }`. Delete `test-run-*.log` and analysis files; if `before` set, only those with `lastModified < before`.

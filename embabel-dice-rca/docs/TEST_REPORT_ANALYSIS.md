@@ -120,10 +120,25 @@ ORDER BY keyword_coverage ASC;
 
 Reports:
 
-- `generateReports()` writes `analysis-suggestions-<timestamp>.md` (findings + suggestion table + reasons).
+- `generateReports()` writes **`<runId>-analysis.md`** (e.g. `run-1737701234567-abc123-analysis.md`): findings + suggestion table + reasons. The runId is `TEST_RUN_ID` when set (e.g. runs started from the test-report-server UI) or `run-<epoch>`, so **runs, logs, and analysis share the same key**. Legacy `analysis-suggestions-YYYYMMDD-HHmmss.md` files are still supported.
+- The analysis report also includes a **Per-test: actual LLM output vs expected** section: for each test, **expected** (keywords, component, cause type, required coverage) and **actual LLM output** (root cause analysis), plus a brief verification summary (coverage, found/missing keywords, component/cause-type).
 - `generateSummary()` appends a short “Suggested param adjustments” section to the summary file when there are suggestions.
 
 Use `TestReportCollector.runAnalysis()` to obtain `AnalysisResult` (findings + suggestions) programmatically for the test-report-server or other tooling.
+
+## Reconciliation: test engine vs AI knobs
+
+**What the test engine tracks:** The results DB and `TestResultAnalyzer` are designed around `ai_model`, `ai_temperature`, and `scenario_id`. They support pass-rate-by-scenario, model/temperature sweeps, and suggestions (e.g. lower temperature if failures correlate with higher temp).
+
+**What the code uses:**
+- **Integration tests** (`DiceRcaIntegrationTest`) call DICE over HTTP. All LLM work runs in **dice-server** (ingest extraction, query reasoning). Dice-server uses a fixed model (`OpenAiModels.GPT_41_NANO`) and does not expose temperature.
+- **RCA agent** (e.g. interactive mode) uses `RcaAgentProperties.analysisModel` and Spring AI chat options (model, temperature). That path is separate from the integration-test pipeline.
+
+**Current status:**
+- **Scenario / AI params in reports:** Integration tests now set `scenario_id` and `ai_params` (model, temperature) via `withMetadata` so H2 and the analyzer receive them. Model/temperature reflect the DICE pipeline (currently fixed; temperature stored as placeholder for future tuning).
+- **Tuning knobs:** Dice-server model (and eventually temperature) would need to be configurable for real param sweeps. The test-report-server UI “parameter override” and “what-if” analysis are planned (see session-notes).
+
+**Bottom line:** The test engine is looking at the right knobs (model, temperature, scenario, keywords). Tests now populate them. Param sweeps and “what-if” runs will be actionable once DICE exposes configurable model/temperature.
 
 ## Populating AI params
 

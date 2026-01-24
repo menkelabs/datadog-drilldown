@@ -48,11 +48,15 @@ class DiceRcaIntegrationTest {
         )
         fun `should identify database pool exhaustion from latency alert`() {
                 val contextId = "test-db-pool-${System.currentTimeMillis()}"
+                val scenarioId = "db-pool-exhaustion"
 
                 runTestWithReporting(
                         testName = "should identify database pool exhaustion from latency alert",
                         contextId = contextId
                 ) { reportBuilder ->
+                        reportBuilder
+                                .withMetadata("scenario_id", scenarioId)
+                                .withMetadata("ai_params", mapOf("model" to "gpt-4.1-nano", "temperature" to 0.0))
                         // Step 1: Load prior knowledge
                         val priorKnowledge = createDatabaseScenarioPriorKnowledge()
                         val loadStart = System.currentTimeMillis()
@@ -149,11 +153,15 @@ class DiceRcaIntegrationTest {
         )
         fun `should identify downstream failure from error rate alert`() {
                 val contextId = "test-downstream-${System.currentTimeMillis()}"
+                val scenarioId = "downstream-failure"
 
                 runTestWithReporting(
                         testName = "should identify downstream failure from error rate alert",
                         contextId = contextId
                 ) { reportBuilder ->
+                        reportBuilder
+                                .withMetadata("scenario_id", scenarioId)
+                                .withMetadata("ai_params", mapOf("model" to "gpt-4.1-nano", "temperature" to 0.0))
                         // Step 1: Load prior knowledge about service dependencies
                         val priorKnowledge = createDownstreamScenarioPriorKnowledge()
                         val loadStart = System.currentTimeMillis()
@@ -251,11 +259,15 @@ class DiceRcaIntegrationTest {
         )
         fun `should identify config change from auth error alert`() {
                 val contextId = "test-config-${System.currentTimeMillis()}"
+                val scenarioId = "auth-config-change"
 
                 runTestWithReporting(
                         testName = "should identify config change from auth error alert",
                         contextId = contextId
                 ) { reportBuilder ->
+                        reportBuilder
+                                .withMetadata("scenario_id", scenarioId)
+                                .withMetadata("ai_params", mapOf("model" to "gpt-4.1-nano", "temperature" to 0.0))
                         // Step 1: Load prior knowledge
                         val priorKnowledge = createAuthScenarioPriorKnowledge()
                         val loadStart = System.currentTimeMillis()

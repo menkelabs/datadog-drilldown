@@ -4,7 +4,7 @@ AI-powered Root Cause Analysis (RCA) system for production incidents, leveraging
 
 ## 🚧 Test Report Server & AI Parameter Tuning UI (Work in Progress) 🚧
 
-![Test Report Server UI](docs/img/tuning_tests.png)
+![Test Report Server UI](docs/img/refactor-fe.png)
 
 The test-report-server provides a web-based interface for running tests, viewing results, and tuning AI parameters to improve detection success across scenarios. See the [Test Report Server & AI Parameter Tuning](#test-report-server--ai-parameter-tuning) section below for details.
 

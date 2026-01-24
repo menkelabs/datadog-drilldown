@@ -3,6 +3,7 @@ package com.example.testreport.repository
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Repository
 import java.sql.ResultSet
+import java.time.Instant
 
 @Repository
 class TestRunRepository(private val jdbc: JdbcTemplate) {
@@ -74,6 +75,14 @@ class TestRunRepository(private val jdbc: JdbcTemplate) {
         }
         return list.firstOrNull()
     }
+
+    /** Delete all rows. Returns number deleted. */
+    fun deleteAll(): Int =
+        jdbc.update("DELETE FROM test_runs")
+
+    /** Delete rows with started_at < [before]. Returns number deleted. */
+    fun deleteBefore(before: Instant): Int =
+        jdbc.update("DELETE FROM test_runs WHERE started_at < ?", java.sql.Timestamp.from(before))
 
     private fun mapRunSummary(rs: ResultSet) = RunSummaryDto(
         runId = rs.getString("run_id"),

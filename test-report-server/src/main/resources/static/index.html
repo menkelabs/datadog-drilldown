@@ -45,13 +45,16 @@
             </section>
 
             <section class="card">
-                <h2>Summary</h2>
+                <h2>Summary <button type="button" id="refresh-summary" class="refresh-btn" title="Refresh">↻</button>
+                </h2>
                 <div id="summary" class="summary">Loading…</div>
             </section>
 
             <section class="card">
-                <h2>Recent runs</h2>
-                <div id="runs-list" class="runs-list">Loading…</div>
+                <h2>Recent runs <button type="button" id="refresh-runs" class="refresh-btn" title="Refresh">↻</button>
+                </h2>
+                <div id="runs-list" class="runs-list"
+                    style="height: 200px; max-height: 200px; overflow-y: auto; overflow-x: auto;">Loading…</div>
             </section>
 
             <section class="card">
@@ -69,10 +72,43 @@
                 </div>
                 <div id="runs-filtered" class="runs-list"></div>
             </section>
+
+            <section class="card admin-card">
+                <h2>Database &amp; logs</h2>
+                <p class="admin-hint">Reset DB, purge old runs, or clear log and analysis files. Logs are in temp dir
+                    (<code>test-run-*.log</code>); analysis in <code>embabel-dice-rca/test-reports/</code>
+                    (<code>run-*-analysis.md</code>, <code>analysis-suggestions-*.md</code>).</p>
+                <div class="admin-actions">
+                    <div class="admin-row">
+                        <button type="button" id="admin-reset-db" class="danger-btn">Reset DB</button>
+                        <label><input type="checkbox" id="admin-reset-clear-logs"> Also clear log and analysis
+                            files</label>
+                    </div>
+                    <div class="admin-row">
+                        <label>Purge DB (and optionally files) before:</label>
+                        <input type="datetime-local" id="admin-purge-before">
+                        <label><input type="checkbox" id="admin-purge-clear-logs"> Also clear log and analysis before
+                            this
+                            date</label>
+                        <button type="button" id="admin-purge-btn" class="danger-btn">Purge</button>
+                    </div>
+                    <div class="admin-row clear-logs-row" id="admin-clear-logs-row">
+                        <label>Clear logs &amp; analysis:</label>
+                        <select id="admin-clear-logs-mode">
+                            <option value="all">All</option>
+                            <option value="before">Before date</option>
+                        </select>
+                        <input type="datetime-local" id="admin-clear-logs-before" class="hidden-by-mode">
+                        <button type="button" id="admin-clear-logs-btn" class="danger-btn">Clear logs &amp;
+                            analysis</button>
+                    </div>
+                </div>
+                <div id="admin-status" class="admin-status" aria-live="polite"></div>
+            </section>
         </div>
 
-        <aside class="logs-panel">
-            <section class="card">
+        <aside class="side-panels">
+            <section class="card logs-card" style="height: 240px; max-height: 240px; overflow: hidden; flex-shrink: 0;">
                 <h2>Test Run Logs</h2>
                 <div class="log-controls">
                     <select id="log-run-select">
@@ -80,11 +116,26 @@
                     </select>
                     <button type="button" id="clear-logs">Clear</button>
                 </div>
-                <div id="log-content" class="log-content"></div>
+                <div id="log-content" class="log-content"
+                    style="height: 150px; max-height: 150px; overflow-y: auto; overflow-x: auto; background: #0f1419; border: 1px solid #2d3640; border-radius: 4px; padding: 0.5rem; font-family: monospace; font-size: 0.75rem; white-space: pre-wrap;">
+                </div>
+            </section>
+            <section class="card analysis-panel"
+                style="height: 300px; max-height: 300px; overflow: hidden; flex-shrink: 0;">
+                <h2>Analysis suggestions</h2>
+                <div class="analysis-controls">
+                    <select id="suggestions-select">
+                        <option value="">Loading…</option>
+                    </select>
+                    <button type="button" id="refresh-suggestions" title="Refresh">↻</button>
+                </div>
+                <div id="suggestions-content" class="suggestions-content"
+                    style="height: 210px; max-height: 210px; overflow-y: auto; overflow-x: auto;"></div>
             </section>
         </aside>
     </main>
 
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="/app.js"></script>
 </body>
 
