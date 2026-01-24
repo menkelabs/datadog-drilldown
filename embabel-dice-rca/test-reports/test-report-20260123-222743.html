@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Test Execution Report</title>
+<style>
+body { font-family: Arial, sans-serif; margin: 20px; }
+.summary { background: #f5f5f5; padding: 15px; border-radius: 5px; margin-bottom: 20px; }
+.test { border: 1px solid #ddd; margin: 10px 0; padding: 15px; border-radius: 5px; }
+.passed { border-left: 5px solid #4CAF50; }
+.failed { border-left: 5px solid #f44336; }
+.error { border-left: 5px solid #ff9800; }
+.code { background: #f4f4f4; padding: 10px; border-radius: 3px; font-family: monospace; white-space: pre-wrap; }
+table { border-collapse: collapse; width: 100%; }
+th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+th { background-color: #4CAF50; color: white; }
+</style>
+</head>
+<body>
+<h1>Test Execution Report</h1>
+<div class='summary'>
+<h2>Summary</h2>
+<table>
+<tr><th>Metric</th><th>Count</th></tr>
+<tr><td>Total Tests</td><td>1</td></tr>
+<tr><td>Passed</td><td style='color: green;'>1</td></tr>
+<tr><td>Failed</td><td style='color: red;'>0</td></tr>
+<tr><td>Errors</td><td style='color: orange;'>0</td></tr>
+</table>
+</div>
+<h2>Test Results</h2>
+<div class='test passed'>
+<h3>should identify database pool exhaustion from latency alert</h3>
+<p><strong>Status:</strong> PASSED</p>
+<p><strong>Duration:</strong> 18024ms</p>
+<h4>Verification</h4>
+<p><strong>Result:</strong> ✅ PASSED</p>
+<p><strong>Keyword Coverage:</strong> 80%</p>
+<p><strong>Keywords Found:</strong> connection pool, database, exhausted, timeout</p>
+<p><strong>Keywords Missing:</strong> HikariPool</p>
+<h4>Root Cause Analysis</h4>
+<div class='code'>The root cause of the incident is connection pool exhaustion in the api-service, primarily caused by slow queries or connection leaks leading to high latency and saturation of the database connection pool. Evidence indicates a new query was holding connections too long after deployment, and the pool was exhausted after 5000ms, with no connections available, resulting in TimeoutErrors. Remediation steps include testing query performance in staging, checking for slow queries, monitoring connection pool utilization, checking for connection leaks, increasing pool size if necessary, and ensuring proper release of connections. Rolling back recent deployments temporarily alleviated the issue, but long-term resolution requires identifying slow queries or leaks.</div>
+</div>
+</body>
+</html>

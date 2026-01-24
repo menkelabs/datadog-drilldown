@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Test Execution Report</title>
+<style>
+body { font-family: Arial, sans-serif; margin: 20px; }
+.summary { background: #f5f5f5; padding: 15px; border-radius: 5px; margin-bottom: 20px; }
+.test { border: 1px solid #ddd; margin: 10px 0; padding: 15px; border-radius: 5px; }
+.passed { border-left: 5px solid #4CAF50; }
+.failed { border-left: 5px solid #f44336; }
+.error { border-left: 5px solid #ff9800; }
+.code { background: #f4f4f4; padding: 10px; border-radius: 3px; font-family: monospace; white-space: pre-wrap; }
+table { border-collapse: collapse; width: 100%; }
+th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+th { background-color: #4CAF50; color: white; }
+</style>
+</head>
+<body>
+<h1>Test Execution Report</h1>
+<div class='summary'>
+<h2>Summary</h2>
+<table>
+<tr><th>Metric</th><th>Count</th></tr>
+<tr><td>Total Tests</td><td>3</td></tr>
+<tr><td>Passed</td><td style='color: green;'>2</td></tr>
+<tr><td>Failed</td><td style='color: red;'>1</td></tr>
+<tr><td>Errors</td><td style='color: orange;'>0</td></tr>
+</table>
+</div>
+<h2>Test Results</h2>
+<div class='test passed'>
+<h3>should identify config change from auth error alert</h3>
+<p><strong>Status:</strong> PASSED</p>
+<p><strong>Duration:</strong> 15240ms</p>
+<h4>Verification</h4>
+<p><strong>Result:</strong> ✅ PASSED</p>
+<p><strong>Keyword Coverage:</strong> 100%</p>
+<p><strong>Keywords Found:</strong> config, issuer, OAuth, auth-service, allowed</p>
+<p><strong>Keywords Missing:</strong> </p>
+<h4>Root Cause Analysis</h4>
+<div class='code'>The root cause of the incident was a configuration change to the auth-service, specifically the removal of an old OAuth issuer from its allowed list. This change led to token validation failures, resulting in a spike of 401 Unauthorized responses and authentication failures for all affected services. The evidence shows that the configuration update on 2026-01-24 at 03:31:56 UTC caused valid tokens issued by the removed issuer to be rejected, disrupting service authentication. Remediation involved restoring the old issuer to the allowed list and implementing a gradual migration to prevent similar issues in the future. The root cause was thus a misconfigured auth-service after a recent update.</div>
+</div>
+<div class='test passed'>
+<h3>should identify database pool exhaustion from latency alert</h3>
+<p><strong>Status:</strong> PASSED</p>
+<p><strong>Duration:</strong> 16977ms</p>
+<h4>Verification</h4>
+<p><strong>Result:</strong> ✅ PASSED</p>
+<p><strong>Keyword Coverage:</strong> 60%</p>
+<p><strong>Keywords Found:</strong> connection pool, database, timeout</p>
+<p><strong>Keywords Missing:</strong> exhausted, HikariPool</p>
+<h4>Root Cause Analysis</h4>
+<div class='code'>The root cause of this incident was a new query in the database holding connections too long after deployment, leading to exhaustion of the HikariCP connection pool. This was exacerbated by slow queries or potential connection leaks, which caused the pool to reach 100% utilization, resulting in no available connections and request timeouts. The high latency (P95 exceeding 500ms) stems from this pool exhaustion, directly impacting the api-service&#39;s performance. To remediate, it is necessary to identify and optimize slow queries, check for connection leaks, and consider increasing the connection pool size or setting appropriate query timeouts.</div>
+</div>
+<div class='test failed'>
+<h3>should identify downstream failure from error rate alert</h3>
+<p><strong>Status:</strong> FAILED</p>
+<p><strong>Duration:</strong> 12580ms</p>
+<h4>Verification</h4>
+<p><strong>Result:</strong> ❌ FAILED</p>
+<p><strong>Keyword Coverage:</strong> 75%</p>
+<p><strong>Keywords Found:</strong> payment-service, downstream, circuit breaker</p>
+<p><strong>Keywords Missing:</strong> unavailable</p>
+<h4>Root Cause Analysis</h4>
+<div class='code'>The root cause of the incident is the failure of the payment-service due to an unreachable payment database, which caused downstream failure and increased error rates in order-service. This upstream failure led to the circuit breaker opening to prevent further cascade effects, triggered by connection timeouts and a 503 error response. Remediation involves restoring network connectivity to the payment database and verifying the payment-service&#39;s downstream dependencies to prevent recurrence.</div>
+<h4>Error</h4>
+<div class='code'>Should identify downstream service failure</div>
+</div>
+</body>
+</html>

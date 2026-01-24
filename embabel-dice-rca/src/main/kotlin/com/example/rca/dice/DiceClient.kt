@@ -2,6 +2,7 @@ package com.example.rca.dice
 
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.web.client.RestTemplateBuilder
+import org.springframework.http.HttpMethod
 import org.springframework.stereotype.Component
 import org.springframework.web.client.RestTemplate
 import org.slf4j.LoggerFactory
@@ -172,6 +173,55 @@ open class DiceClient(
             true
         } catch (e: Exception) {
             logger.error("Failed to delete proposition from DICE: ${e.message}")
+            false
+        }
+    }
+    
+    /**
+     * Delete all propositions for a context.
+     * 
+     * API: DELETE /api/v1/contexts/{contextId}/memory
+     */
+    open fun deleteContext(contextId: String): Boolean {
+        val url = "$diceServerUrl/api/v1/contexts/$contextId/memory"
+        
+        return try {
+            val response = restTemplate.exchange(
+                url,
+                HttpMethod.DELETE,
+                null,
+                Map::class.java
+            )
+            val result = response.body as? Map<*, *>
+            logger.info("DICE deleted context: $contextId, result: $result")
+            true
+        } catch (e: Exception) {
+            logger.error("Failed to delete context from DICE: ${e.message}")
+            false
+        }
+    }
+    
+    /**
+     * Clear all contexts and propositions (useful for testing).
+     * 
+     * API: DELETE /api/v1/contexts
+     * WARNING: This deletes ALL data in dice-server!
+     */
+    open fun clearAll(): Boolean {
+        val url = "$diceServerUrl/api/v1/contexts"
+        
+        return try {
+            val response = restTemplate.exchange(
+                url,
+                HttpMethod.DELETE,
+                null,
+                Map::class.java
+            )
+            val result = response.body as? Map<*, *>
+            logger.warn("DICE cleared all contexts and propositions: $result")
+            true
+        } catch (e: Exception) {
+            logger.error("Failed to clear all from DICE: ${e.message}")
             false
         }
     }

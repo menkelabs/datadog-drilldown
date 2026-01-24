@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Test Execution Report</title>
+<style>
+body { font-family: Arial, sans-serif; margin: 20px; }
+.summary { background: #f5f5f5; padding: 15px; border-radius: 5px; margin-bottom: 20px; }
+.test { border: 1px solid #ddd; margin: 10px 0; padding: 15px; border-radius: 5px; }
+.passed { border-left: 5px solid #4CAF50; }
+.failed { border-left: 5px solid #f44336; }
+.error { border-left: 5px solid #ff9800; }
+.code { background: #f4f4f4; padding: 10px; border-radius: 3px; font-family: monospace; white-space: pre-wrap; }
+table { border-collapse: collapse; width: 100%; }
+th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+th { background-color: #4CAF50; color: white; }
+</style>
+</head>
+<body>
+<h1>Test Execution Report</h1>
+<div class='summary'>
+<h2>Summary</h2>
+<table>
+<tr><th>Metric</th><th>Count</th></tr>
+<tr><td>Total Tests</td><td>1</td></tr>
+<tr><td>Passed</td><td style='color: green;'>0</td></tr>
+<tr><td>Failed</td><td style='color: red;'>1</td></tr>
+<tr><td>Errors</td><td style='color: orange;'>0</td></tr>
+</table>
+</div>
+<h2>Test Results</h2>
+<div class='test failed'>
+<h3>should identify database pool exhaustion from latency alert</h3>
+<p><strong>Status:</strong> FAILED</p>
+<p><strong>Duration:</strong> 17605ms</p>
+<h4>Verification</h4>
+<p><strong>Result:</strong> ❌ FAILED</p>
+<p><strong>Keyword Coverage:</strong> 60%</p>
+<p><strong>Keywords Found:</strong> connection pool, database, timeout</p>
+<p><strong>Keywords Missing:</strong> exhausted, HikariPool</p>
+<h4>Root Cause Analysis</h4>
+<div class='code'>The root cause of the incident is the exhaustion of the database connection pool due to slow queries or connection leaks, which led to service errors and high latency. This was evidenced by the connection pool being at 100% utilization, timeout errors indicating unavailability of connections, and a significant increase in request duration (P95) to 2450ms, well above the threshold. Remediation steps include optimizing slow queries, checking for and fixing connection leaks, increasing pool size if necessary, setting query timeouts, and testing database performance in staging before deployment to prevent recurrence.</div>
+<h4>Error</h4>
+<div class='code'>Should identify database pool exhaustion</div>
+</div>
+</body>
+</html>
