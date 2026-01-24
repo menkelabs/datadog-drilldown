@@ -1,0 +1,24 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: test-report-server
+  main:
+    banner-mode: off
+  datasource:
+    url: ${TEST_REPORT_DB_URL:jdbc:h2:file:../embabel-dice-rca/test-reports/test-history;AUTO_SERVER=TRUE;DB_CLOSE_DELAY=-1}
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: ""
+
+# Path to run-tests-with-server.sh and project root (relative to workspace root)
+# Override via env: PROJECT_ROOT, EMBABEL_DICE_RCA_DIR
+run-tests:
+  project-root: ${PROJECT_ROOT:..}
+  script-path: ${EMBABEL_DICE_RCA_SCRIPT:}
+
+logging:
+  level:
+    root: WARN
+    com.example.testreport: INFO

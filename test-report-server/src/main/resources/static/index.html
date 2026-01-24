@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Report – Evaluation</title>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+
+<body>
+    <header>
+        <h1>Test Report – Evaluation</h1>
+        <p>Look up runs, analysis, and trigger test runs.</p>
+    </header>
+
+    <main class="main-layout">
+        <div class="main-content">
+            <section class="card" id="run-tests-section">
+                <h2>Run tests</h2>
+                <form id="run-form">
+                    <div class="form-group">
+                        <div class="form-row">
+                            <label for="pattern">Test pattern (optional)</label>
+                            <input type="text" id="pattern" name="pattern"
+                                placeholder="e.g. DiceRcaIntegration, AllScenarios">
+                        </div>
+                        <small class="pattern-hint">Leave empty for all tests, or use:
+                            <code>DiceRcaIntegration</code> (quick test), <code>AllScenarios</code></small>
+                    </div>
+                    <div class="form-row">
+                        <label>
+                            <input type="checkbox" id="verbose" name="verbose">
+                            Verbose
+                        </label>
+                    </div>
+                    <div class="form-row">
+                        <button type="submit" id="run-btn">Run tests</button>
+                        <button type="button" id="quick-test-btn" class="secondary-btn">Quick:
+                            DiceRcaIntegration</button>
+                    </div>
+                </form>
+                <div id="run-status" class="status" aria-live="polite"></div>
+                <div id="run-results" class="results"></div>
+            </section>
+
+            <section class="card">
+                <h2>Summary</h2>
+                <div id="summary" class="summary">Loading…</div>
+            </section>
+
+            <section class="card">
+                <h2>Recent runs</h2>
+                <div id="runs-list" class="runs-list">Loading…</div>
+            </section>
+
+            <section class="card">
+                <h2>Runs (filter)</h2>
+                <div class="form-row">
+                    <input type="text" id="filter-runId" placeholder="Run ID">
+                    <input type="text" id="filter-scenario" placeholder="Scenario">
+                    <select id="filter-status">
+                        <option value="">Any status</option>
+                        <option value="PASSED">PASSED</option>
+                        <option value="FAILED">FAILED</option>
+                        <option value="ERROR">ERROR</option>
+                    </select>
+                    <button type="button" id="apply-filter">Apply</button>
+                </div>
+                <div id="runs-filtered" class="runs-list"></div>
+            </section>
+        </div>
+
+        <aside class="logs-panel">
+            <section class="card">
+                <h2>Test Run Logs</h2>
+                <div class="log-controls">
+                    <select id="log-run-select">
+                        <option value="">Select a run...</option>
+                    </select>
+                    <button type="button" id="clear-logs">Clear</button>
+                </div>
+                <div id="log-content" class="log-content"></div>
+            </section>
+        </aside>
+    </main>
+
+    <script src="/app.js"></script>
+</body>
+
+</html>

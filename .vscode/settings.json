@@ -1,5 +1,10 @@
 {
     "plantuml.render": "Local",
     "plantuml.exportFormat": "png",
-    "plantuml.jar": "tools/plantuml/plantuml.jar"
+    "plantuml.jar": "tools/plantuml/plantuml.jar",
+    "kotlin.languageServer.enabled": true,
+    "kotlin.compiler.jvm.target": "21",
+    "java.configuration.maven.userSettings": null,
+    "java.jdt.ls.java.home": null,
+    "java.compile.nullAnalysis.mode": "automatic"
 }
