@@ -8,8 +8,7 @@ title System Context Diagram - Embabel Dice RCA
 Person(sre, "SRE / On-Call Engineer", "Investigates production incidents")
 Person(platform, "Platform Engineer", "Sets up monitoring integrations")
 
-System(rcaAgent, "Embabel RCA Agent", "AI-powered incident analysis system")
-System(rcaPython, "RCA Python Module", "Python implementation & utilities")
+System(rcaAgent, "Embabel RCA Agent", "AI-powered incident analysis system (Kotlin/Spring Boot)")
 System(diceServer, "DICE Server", "Manages incident memory & reasoning")
 
 System_Ext(datadog, "Datadog", "Observability platform")
@@ -18,14 +17,11 @@ System_Ext(alerting, "Alerting System", "PagerDuty / OpsGenie")
 System_Ext(chat, "Chat Platform", "Slack / Teams")
 
 Rel(sre, rcaAgent, "Asks questions", "CLI/Chat")
-Rel(sre, rcaPython, "Uses tools", "CLI")
 Rel(platform, diceServer, "Configures alerts", "API")
 
 Rel(rcaAgent, datadog, "Queries telemetry", "REST")
-Rel(rcaPython, datadog, "Queries logs", "REST")
 Rel(rcaAgent, llm, "Sends prompts", "API")
 Rel(rcaAgent, diceServer, "Pushes analysis", "REST")
-Rel(rcaPython, diceServer, "Pushes analysis", "REST")
 
 Rel(alerting, diceServer, "Sends triggers", "Webhook")
 Rel(diceServer, rcaAgent, "Triggers analysis", "REST")
