@@ -439,17 +439,9 @@ class IncidentInvestigatorAgent(
     fun analysisSatisfactory(critique: AnalysisCritique): Boolean =
         critique.accepted
 
-    /**
-     * Condition: Analysis needs improvement.
-     */
-    @Condition(name = ANALYSIS_UNSATISFACTORY)
-    fun analysisUnsatisfactory(critique: AnalysisCritique): Boolean =
-        !critique.accepted
-
     companion object {
         const val EVIDENCE_COLLECTED = "evidenceCollected"
         const val ANALYSIS_COMPLETE = "analysisComplete"
         const val ANALYSIS_SATISFACTORY = "analysisSatisfactory"
-        const val ANALYSIS_UNSATISFACTORY = "analysisUnsatisfactory"
     }
 }

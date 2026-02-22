@@ -107,9 +107,14 @@ class DiceIngestionService(
                 createContextFromLogEvent(incidentId, event)
             }
 
-            // Convert and add logs to context
             context.metadata["log_count"] = 
                 (context.metadata["log_count"] as? Int ?: 0) + event.logs.size
+
+            val logSummary = event.logs.take(20).joinToString("\n") { log ->
+                "[${log.level ?: "INFO"}] ${log.service ?: "unknown"}: ${log.message.take(200)}"
+            }
+            val ingestText = "Log stream: ${event.id}\nService: ${event.service}\nQuery: ${event.query}\nEntries: ${event.logs.size}\n\n$logSummary"
+            diceClient.ingest(incidentId, "logs-${event.id}", ingestText)
 
             eventPublisher.publishEvent(LogsIngestedEvent(this, event, incidentId))
 
@@ -150,6 +155,9 @@ class DiceIngestionService(
                 percentChange = anomaly.deviationPercent
             )
             context.addSymptom(symptom)
+
+            val ingestText = "Metric anomaly: ${anomaly.metricName}\nService: ${anomaly.service}\nQuery: ${anomaly.query}\nExpected: ${anomaly.expectedValue}, Actual: ${anomaly.actualValue}\nDeviation: ${anomaly.deviationPercent}%"
+            diceClient.ingest(incidentId, "anomaly-${anomaly.id}", ingestText)
 
             eventPublisher.publishEvent(AnomalyIngestedEvent(this, anomaly, incidentId))
 
@@ -209,6 +217,10 @@ class DiceIngestionService(
             )
 
             activeIncidents[incidentId] = context
+
+            val ingestText = "Manual incident report: ${report.title}\nService: ${report.service}\nEnvironment: ${report.env}\nSeverity: ${report.severity}\nDescription: ${report.description}"
+            diceClient.ingest(incidentId, "report-${report.id}", ingestText)
+
             eventPublisher.publishEvent(ManualReportIngestedEvent(this, report, incidentId))
 
             // Always trigger analysis for manual reports

@@ -43,8 +43,7 @@ embabel-dice-rca/
 │   │   │           └── rca/
 │   │   │               ├── EmbabelDiceRcaApplication.kt
 │   │   │               ├── config/
-│   │   │               │   ├── DatadogConfig.kt
-│   │   │               │   └── EmbabelConfig.kt
+│   │   │               │   └── DatadogConfig.kt
 │   │   │               ├── domain/
 │   │   │               │   ├── Symptom.kt
 │   │   │               │   ├── LogCluster.kt
