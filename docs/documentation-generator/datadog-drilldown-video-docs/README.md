@@ -61,7 +61,15 @@ CI **does not** run TTS or `compose.sh`. It only copies **`pages-site/index.html
 2. **`git add recordings/*.mp4`** and commit (they are **not** ignored; other `*.mp4` in this folder still are).  
 3. Push to **`main`**. The workflow runs when **`recordings/`**, **`pages-site/`**, or the workflow file changes.
 
-**One-time repo setup:** **Settings → Pages** → **Source: GitHub Actions**. No **`OPENAI_API_KEY`** secret is required for Pages.
+**One-time repo setup**
+
+1. Open **Settings → Pages** for the repository (e.g. `https://github.com/menkelabs/datadog-drilldown/settings/pages`).
+2. Under **Build and deployment**, set **Source** to **GitHub Actions** (not *Deploy from a branch*). **Save.**
+3. Re-run the failed **video-docs-pages** workflow (**Actions** → workflow → **Re-run all jobs**).
+
+If **Source** is not **GitHub Actions**, the deploy step fails with **`Failed to create deployment (404)`** — the Actions Pages API is not enabled for that repo.
+
+**Orgs:** Allow GitHub Pages and Actions under organization settings if policies block them.
 
 > **Note:** One GitHub repo = one Pages site. If you use Pages for something else, merge sites or use another repo.
 
