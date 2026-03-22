@@ -120,6 +120,8 @@ Imports resolve via [pytest.ini](pytest.ini) (`pythonpath = .`). From `dice-leap
 pytest tests/ -q
 ```
 
+If you get **`No module named pytest`**, a different project’s venv may be active — run **`python3 -m pytest tests/ -q`** (and install deps with that same `python3`: `python3 -m pip install -r requirements.txt`).
+
 - **Leap cloud smoke** (optional): `pytest tests/test_leap.py -m leap -q` — requires `[leap]` and `DWAVE_API_TOKEN`.
 - Default test run **skips** cloud Leap; includes a test that `leap_hybrid` without `dwave-system` raises `ImportError`.
 

@@ -85,7 +85,9 @@ Set `TRACE_SAMPLING_PROBABILITY` or add `management.otlp.tracing.endpoint` per S
 
 ### Optional: QUBO bridge (`dice-leap-poc`, off by default)
 
-After RCA, the app can call the Python **dice-leap-poc** solver via subprocess ([ADR 0002](../docs/adr/0002-dice-leap-subprocess-bridge.md)).
+After RCA, **`QuboReportEnricher`** attaches optional solver output to the same **`Report`** (`findings["qubo"]`, extra recommendations). That is the **integration point** between **DICE** (propositions from ingested text via `dice-server`) and **QUBO** (numerical short-list under mutual exclusion): one incident artifact for operators and downstream tools. **QUBO does not skip DICE ingest** on the alert path — `DiceClient.ingest` runs before `RcaAgent.startAnalysis` in `DiceIngestionService.ingestAlert`.
+
+The app calls the Python **dice-leap-poc** solver via subprocess when rollover chooses the QUBO path ([ADR 0002](../docs/adr/0002-dice-leap-subprocess-bridge.md)).
 
 ```bash
 # Path to the dice-leap-poc directory (contains scripts/solve_json.py)

@@ -1,3 +1,0 @@
-# Repository README
-
-{! ../../../README.md !}

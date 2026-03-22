@@ -1,0 +1,5 @@
+DICE + QUBO: QuboReportEnricher is the bridge
+Dice ingest first; enricher after RCA
+Small graph → heuristic; rollover → solver
+sample_data: tiny JSON fixtures, not raw dumps
+Leap optional; classical enough for demos

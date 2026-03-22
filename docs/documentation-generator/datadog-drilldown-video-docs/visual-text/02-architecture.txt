@@ -1,0 +1,5 @@
+Four modules
+embabel-dice-rca — analysis + QuboReportEnricher
+dice-server — propositions from incident text
+test-report-server — runs UI & solver history
+dice-leap-poc — Python solver (Leap optional)

@@ -1,0 +1,7 @@
+.venv/
+audio/
+terminal/rendered/
+recordings/
+*.mp3
+*.mp4
+.env

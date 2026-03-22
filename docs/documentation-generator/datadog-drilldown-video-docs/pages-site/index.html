@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Datadog Drilldown — demo videos</title>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --card: #161b22;
+      --border: #30363d;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --accent: #58a6ff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: ui-sans-serif, system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      margin: 0;
+      padding: 1.5rem clamp(1rem, 4vw, 2.5rem);
+      line-height: 1.5;
+    }
+    h1 { font-size: 1.5rem; font-weight: 600; margin: 0 0 0.25rem; }
+    .sub { color: var(--muted); font-size: 0.9rem; margin-bottom: 2rem; }
+    section {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem 1.25rem;
+      margin-bottom: 1.25rem;
+    }
+    section h2 {
+      font-size: 0.85rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      margin: 0 0 0.75rem;
+      font-weight: 600;
+    }
+    video {
+      width: 100%;
+      max-width: 960px;
+      border-radius: 6px;
+      background: #000;
+    }
+    ul { list-style: none; padding: 0; margin: 0; }
+    li { margin-bottom: 0.5rem; }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .full { margin-top: 0.75rem; }
+  </style>
+</head>
+<body>
+  <h1>Datadog Drilldown — demo videos</h1>
+  <p class="sub">Built from <code>docs/documentation-generator/datadog-drilldown-video-docs</code> on push to <code>main</code>.</p>
+
+  <section class="full">
+    <h2>Full demo</h2>
+    <video controls preload="metadata" src="videos/full-demo.mp4">
+      Your browser does not support the video tag.
+    </video>
+  </section>
+
+  <section>
+    <h2>Segments</h2>
+    <ul>
+      <li><a href="videos/01-welcome-scope.mp4">01 — Welcome &amp; scope</a></li>
+      <li><a href="videos/02-architecture.mp4">02 — Architecture</a></li>
+      <li><a href="videos/03-tests-and-ui.mp4">03 — Tests &amp; UI</a></li>
+      <li><a href="videos/04-dwave-qubo.mp4">04 — D-Wave / QUBO</a></li>
+      <li><a href="videos/05-jvm-bridge-smoke.mp4">05 — JVM bridge smoke</a></li>
+    </ul>
+    <p class="sub" style="margin-top:1rem;margin-bottom:0;">Open a link in a new tab to stream or download the MP4.</p>
+  </section>
+</body>
+</html>

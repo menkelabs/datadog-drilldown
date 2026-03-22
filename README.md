@@ -115,6 +115,8 @@ Tuning workflow and H2 details: **[test-report-server/README.md](test-report-ser
 | **[docs/DWAVE_LEAP_SETUP.md](docs/DWAVE_LEAP_SETUP.md)** | D-Wave Leap token & venv |
 | **[dwave.md](dwave.md)** | DICE + QUBO + Leap architecture |
 | **[docs/adr/0002-dice-leap-subprocess-bridge.md](docs/adr/0002-dice-leap-subprocess-bridge.md)** | JVM ↔ Python bridge |
+| **[docs/VIDEO_NARRATIVE_ARCHITECTURE_AND_DWAVE.md](docs/VIDEO_NARRATIVE_ARCHITECTURE_AND_DWAVE.md)** | Script outline for videos: full architecture + D-Wave deep dive |
+| **[docs/documentation-generator/datadog-drilldown-video-docs/](docs/documentation-generator/datadog-drilldown-video-docs/)** | **TTS + VHS + ffmpeg** bundle (`generate-all.sh`, `narration/`, `terminal/`) — see README |
 | **[embabel-dice-rca/docs/architecture/README.md](embabel-dice-rca/docs/architecture/README.md)** | Diagrams |
 | **[docs/puml-setup.md](docs/puml-setup.md)** | PlantUML |
 | **[milestones/milestone-1.md](milestones/milestone-1.md)** · **[milestone-2.md](milestones/milestone-2.md)** | Roadmap |

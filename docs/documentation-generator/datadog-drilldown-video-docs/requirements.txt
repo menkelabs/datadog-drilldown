@@ -1,0 +1,2 @@
+# Default: TTS + compose pipeline (fast install). Manim is optional — see requirements-manim.txt
+openai==2.29.0

@@ -1,0 +1,4 @@
+ADR-002: reuse Python QUBO via subprocess
+RCA → instance JSON → solve_json.py → stdout
+qubo-e2e-smoke.sh: venv + toy + Maven
+Set PYTHON so Kotlin sees the same interpreter

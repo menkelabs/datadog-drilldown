@@ -1,37 +1,15 @@
-# Documentation generator (MkDocs)
+# Documentation generator (extracted assets)
 
-Builds a static site from **existing** repo markdown via the [include-markdown](https://github.com/mondeja/mkdocs-include-markdown-plugin) plugin (no duplicate source of truth).
+This folder holds a **copy** of the **demo / video generation framework** from `docs/demos/`, packaged so you can **reuse it in other repositories** without moving the canonical implementation out of tekton-dag.
 
-## Quick start
+| Path | Purpose |
+|------|---------|
+| **[video-framework/](video-framework/)** | `compose.sh`, `generate-narration.py`, `generate-all.sh`, `requirements.txt` — drop into your project (e.g. `docs/demos/`). |
+| **[example-demo-bundle/](example-demo-bundle/)** | Minimal narration + VHS tape to sanity-check the pipeline. |
+| **[datadog-drilldown-video-docs/](datadog-drilldown-video-docs/)** | **This repo’s** five-segment narration + `compose.sh` / `generate-all.sh` aligned with `docs/VIDEO_NARRATIVE_…`. |
 
-```bash
-cd docs/documentation-generator
-python3 -m venv .venv
-source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-mkdocs serve                # http://127.0.0.1:8000
-```
+**Canonical source** (living copy used by this repo): `docs/demos/` in tekton-dag. When improving the framework, update **both** places or re-copy from `docs/demos/` into `video-framework/` periodically.
 
-Static output:
+**Later:** you can publish `video-framework/` as a shared submodule or package; this layout is the staging area until then.
 
-```bash
-mkdocs build
-# → site/  (gitignored)
-```
-
-## Configuration
-
-| File | Role |
-|------|------|
-| [mkdocs.yml](mkdocs.yml) | Site name, theme, nav, plugins |
-| [docs/](docs/) | Thin wrapper `.md` files that `{! include !}` canonical paths |
-| [requirements.txt](requirements.txt) | Python deps |
-
-## Milestone
-
-Tracked in **[milestones/milestone-3.md](../../milestones/milestone-3.md)** (M3a–M3d: scaffold, curate, CI, publish).
-
-## Troubleshooting
-
-- **Include path errors:** Wrappers live in `docs/`; paths like `../../../README.md` are relative to each wrapper file.
-- **`mkdocs build --strict` fails:** Often unclosed fences or duplicate headings in included files; fix upstream markdown or relax `strict` in `mkdocs.yml` temporarily.
+See [video-framework/README.md](video-framework/README.md) for prerequisites (ffmpeg, VHS, optional Manim, OpenAI TTS) and integration steps.

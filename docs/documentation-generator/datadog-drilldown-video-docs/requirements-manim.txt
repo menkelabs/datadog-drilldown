@@ -1,0 +1,2 @@
+# Optional — only if you add Manim scenes under animations/scenes.py
+manim==0.19.1

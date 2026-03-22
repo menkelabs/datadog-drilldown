@@ -1,0 +1,5 @@
+CI: Maven across the Java reactor
+RCA: unit, QUBO bridge, Dice scenarios
+test-report-server: Playwright on 18081
+dice-leap-poc: pytest; Leap tests optional
+Run-tests panel, H2, JSONL → DB sync
