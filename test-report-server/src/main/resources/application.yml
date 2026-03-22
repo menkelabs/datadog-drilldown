@@ -22,6 +22,12 @@ run-tests:
 solver-runs:
   directory: ${SOLVER_RUNS_DIR:../dice-leap-poc/runs}
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
 logging:
   level:
     root: WARN

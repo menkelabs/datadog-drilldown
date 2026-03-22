@@ -10,7 +10,7 @@ Use these workflows as **required** for `main` (or your default branch):
 |----------|---------|
 | [`dice-leap-poc.yml`](../.github/workflows/dice-leap-poc.yml) | Python PoC: `requirements.txt` + `pytest` (local classical only). |
 | [`java-modules.yml`](../.github/workflows/java-modules.yml) | Java reactor: `mvn test` for `embabel-dice-rca`, `dice-server`, `test-report-server`. |
-| [`test-report-server.yml`](../.github/workflows/test-report-server.yml) | Standalone test-report-server job (also covered by reactor; keep if you want path-scoped redundancy). |
+| [`test-report-server.yml`](../.github/workflows/test-report-server.yml) | `mvn test` in `test-report-server` plus **Playwright** UI/API smoke (`e2e-ui` job). |
 
 ## Do **not** require by default
 

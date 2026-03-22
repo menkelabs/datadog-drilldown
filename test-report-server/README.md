@@ -20,6 +20,21 @@ mvn -f test-report-server/pom.xml spring-boot:run
 Open **http://localhost:8081** for the UI. The UI lets you:
 
 - **Run tests**: optional pattern (e.g. `AllScenarios`, `DiceRcaIntegration`), optional verbose. Triggers `embabel-dice-rca/run-tests-with-server.sh`, then polls for results.
+
+## UI / API E2E tests (Playwright)
+
+Browser smoke tests live under **[e2e/](e2e/)**. They start Spring Boot on port **18081** (via `SERVER_PORT`) and assert the main page, panels, and a few REST endpoints.
+
+**Prerequisites:** JDK 21, Maven, Node 20+.
+
+```bash
+cd test-report-server/e2e
+npm ci
+npx playwright install chromium   # first time only
+npm test
+```
+
+CI runs the same suite in [`.github/workflows/test-report-server.yml`](../.github/workflows/test-report-server.yml) (`e2e-ui` job after `mvn test`).
 - View **summary** and **recent runs**.
 - **Filter** runs by run ID, scenario, status.
 - **View** individual run details (click ID).
