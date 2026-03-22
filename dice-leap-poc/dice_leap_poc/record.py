@@ -9,6 +9,9 @@ from typing import Any, Literal
 SolverMode = Literal["local_classical", "leap_hybrid"]
 StrategyChoice = Literal["heuristic_only", "qubo"]
 
+# Bump when QUBO mapping or SolveRecord contract changes (Kotlin / JSONL consumers).
+DEFAULT_ENCODING_VERSION = "1"
+
 
 @dataclass
 class SolveRecord:
@@ -22,6 +25,7 @@ class SolveRecord:
     runtime_ms: float
     baseline_objective: float
     vs_baseline_delta: float
+    encoding_version: str = DEFAULT_ENCODING_VERSION
     tier: str | None = None
 
     def to_json_dict(self) -> dict[str, Any]:

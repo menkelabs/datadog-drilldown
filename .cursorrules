@@ -1,0 +1,4 @@
+# Agent preferences (datadog-drilldown)
+
+- Use **terminal `git`** (`git add`, `git commit`, `git push`, `git status`) for version control in this repo — **do not** use MCP/GitLens git tools unless the user explicitly asks.
+- Request **`git_write`** / **`network`** (or **`all`**) on sandboxed runs when git needs to modify state or push.

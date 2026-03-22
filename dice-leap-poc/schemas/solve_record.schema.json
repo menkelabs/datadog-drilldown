@@ -26,6 +26,10 @@
     "runtime_ms": { "type": "number" },
     "baseline_objective": { "type": "number" },
     "vs_baseline_delta": { "type": "number" },
+    "encoding_version": {
+      "type": "string",
+      "description": "QUBO/SolveRecord encoding revision for consumers (e.g. Kotlin ingest)."
+    },
     "tier": { "type": ["string", "null"] }
   },
   "additionalProperties": false

@@ -51,5 +51,6 @@ def test_leap_hybrid_smoke_toy_when_token_present():
     )
     assert rec.solver_mode == "leap_hybrid"
     assert rec.strategy_choice == "qubo"
+    assert rec.encoding_version == "1"
     assert rec.n_vars == 4
     assert rec.runtime_ms >= 0

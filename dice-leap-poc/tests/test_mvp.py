@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -19,6 +20,12 @@ def test_load_toy():
     inst = Instance.load_json(TOY)
     assert inst.instance_id == "toy_dw_md"
     assert len(inst.entities) == 4
+
+
+def test_encoding_version_from_instance():
+    inst = replace(Instance.load_json(TOY), encoding_version="2")
+    rec = run_instance(inst, strategy_choice="heuristic_only")
+    assert rec.encoding_version == "2"
 
 
 def test_bqm_variable_count():
@@ -60,5 +67,7 @@ def test_run_json_file_explicit_qubo():
     rec = run_json_file(TOY, strategy_choice="qubo", seed=7, num_reads=2000)
     assert rec.instance_id == "toy_dw_md"
     assert rec.strategy_choice == "qubo"
+    assert rec.encoding_version == "1"
     line = rec.to_json_line()
     assert "vs_baseline_delta" in line
+    assert '"encoding_version": "1"' in line

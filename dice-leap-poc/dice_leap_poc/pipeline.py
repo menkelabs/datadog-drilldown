@@ -8,7 +8,7 @@ from typing import Literal
 from dice_leap_poc.baseline import greedy_min_energy
 from dice_leap_poc.instance import Instance
 from dice_leap_poc.qubo import assignment_to_selected, build_bqm
-from dice_leap_poc.record import SolveRecord
+from dice_leap_poc.record import DEFAULT_ENCODING_VERSION, SolveRecord
 from dice_leap_poc.solve_leap import solve_leap_hybrid
 from dice_leap_poc.solve_local import solve_local_sa
 from dice_leap_poc.strategy import RolloverConfig, plan_strategy
@@ -36,6 +36,7 @@ def run_instance(
     bqm = build_bqm(inst)
     heuristic_assign = greedy_min_energy(inst, bqm)
     e_heur = bqm.energy(heuristic_assign)
+    encoding_version = inst.encoding_version or DEFAULT_ENCODING_VERSION
 
     if strategy_choice == "heuristic_only":
         sel = assignment_to_selected(bqm, heuristic_assign)
@@ -50,6 +51,7 @@ def run_instance(
             runtime_ms=0.0,
             baseline_objective=e_heur,
             vs_baseline_delta=0.0,
+            encoding_version=encoding_version,
             tier=inst.tier,
         )
 
@@ -75,6 +77,7 @@ def run_instance(
         runtime_ms=rt,
         baseline_objective=e_heur,
         vs_baseline_delta=delta,
+        encoding_version=encoding_version,
         tier=inst.tier,
     )
 

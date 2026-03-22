@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -25,6 +25,7 @@ class Instance:
     dependency_penalty: float = 10.0
     tier: str | None = None
     description: str | None = None
+    encoding_version: str | None = None
 
     @staticmethod
     def from_dict(d: dict[str, Any]) -> Instance:
@@ -43,6 +44,7 @@ class Instance:
             dependency_penalty=float(d.get("dependency_penalty", 10.0)),
             tier=d.get("tier"),
             description=d.get("description"),
+            encoding_version=d.get("encoding_version"),
         )
 
     @staticmethod

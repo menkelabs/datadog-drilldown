@@ -21,6 +21,8 @@ Use this as the baseline for future iterations:
 | Strategy (tier + rollover metrics) | `dice_leap_poc/strategy.py` — `tier: simple\|complex`; else `n>12` or `edges>8` |
 | Pipeline + `SolveRecord` | `dice_leap_poc/pipeline.py`, `record.py` |
 | Batch + tier aggregates | `dice_leap_poc/batch.py`, `scripts/batch_sample.py` |
+| L1 JSONL mirror | `scripts/mirror_jsonl_l1.py` → `embabel-dice-rca/test-reports/solver-runs/` |
+| Encoding contract | `SolveRecord.encoding_version` (default `1`), optional on instance JSON |
 | Fixtures | `sample_data/toy_dw_md.json` (simple), `sample_data/complex_dw_md.json` (18 vars, QUBO win vs greedy) |
 | Schema | `dice-leap-poc/schemas/solve_record.schema.json` |
 | Tests | `tests/test_mvp.py`, `tests/test_acceptance.py`, `tests/test_leap.py` (Leap smoke optional) |
@@ -66,8 +68,8 @@ Details: [§ CI workflow spec](#ci-workflow-spec-m1a), [§ Leap adapter conventi
 ### Later / optional
 
 - [ ] **persist-l2** — `solver_runs` H2 + test-report-server API if JSONL insufficient.
-- [ ] **persist-l1** — Mirror JSONL under `embabel-dice-rca/test-reports/` in CI or manual export.
-- [ ] **contract-evolution** — Optional `encoding_version` / `qubo_schema_version` field on `SolveRecord` when Kotlin ingest or encodings change.
+- [x] **persist-l1** — Script `dice-leap-poc/scripts/mirror_jsonl_l1.py` copies `runs/*.jsonl` → `embabel-dice-rca/test-reports/solver-runs/` (dir gitignored; manual or CI artifact).
+- [x] **contract-evolution** — `encoding_version` on `SolveRecord` + optional instance JSON field; default `1` in `record.py`; schema updated.
 - [ ] **kotlin-ingest** — Thin client or batch job to read JSONL / HTTP; **defer** until contract stable.
 
 ---

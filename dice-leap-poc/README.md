@@ -42,6 +42,17 @@ python scripts/batch_sample.py
 
 Runs every `sample_data/*.json` with **automatic** strategy (`tier` + rollover metrics), appends to `runs/batch.jsonl`, and prints per-tier aggregates. Uses **`solver_mode=local_classical`** (default).
 
+## L1 mirror (optional)
+
+Copy JSONL from `runs/` next to Kotlin test-report layout (`embabel-dice-rca/test-reports/` is gitignored — local/CI artifact only):
+
+```bash
+# from repo root, after generating runs/*.jsonl
+python dice-leap-poc/scripts/mirror_jsonl_l1.py
+```
+
+Writes to `embabel-dice-rca/test-reports/solver-runs/*.jsonl`. Override paths with `--source` / `--dest` if needed.
+
 ## Solver backends
 
 | `solver_mode` | Backend | Default CI |
@@ -72,6 +83,7 @@ Heuristic-only runs always record `solver_mode=local_classical` (no sampler job)
 
 - JSON **`tier`**: `simple` → `heuristic_only`; `complex` → `qubo`.
 - If **`tier` is omitted**: rollover when `n_entities > 12` or `n_conflicts + n_dependencies > 8` (see [`dice_leap_poc/strategy.py`](dice_leap_poc/strategy.py), `RolloverConfig`).
+- Optional instance field **`encoding_version`**: string copied into `SolveRecord.encoding_version` (default **`1`** from [`dice_leap_poc/record.py`](dice_leap_poc/record.py) when omitted). Bump when the QUBO mapping or record shape changes.
 
 ## Tests
 
@@ -104,6 +116,7 @@ Each run produces a JSON object (one line in JSONL) with:
 | `runtime_ms` | Solve wall time (0 for heuristic-only) |
 | `baseline_objective` | Greedy heuristic energy |
 | `vs_baseline_delta` | `baseline_objective - objective` (positive ⇒ optimizer better) |
+| `encoding_version` | QUBO/record contract revision (default `1`; override via instance JSON) |
 | `tier` | Optional fixture label (`simple` / `complex`) |
 
 JSON Schema: [schemas/solve_record.schema.json](schemas/solve_record.schema.json)
