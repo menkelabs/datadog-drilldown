@@ -16,12 +16,29 @@ datadog-drilldown-video-docs/
   requirements.txt
   narration/                ← NN-topic.md → audio/NN-topic.mp3
   visual-text/              ← one line per row, stem matches narration file (e.g. 01-welcome-scope.txt)
-  audio/                    ← generated (gitignored)
-  text-rendered/            ← optional cache of per-stem text MP4s (compose writes recordings/*.mp4)
-  terminal/*.tape           ← VHS sources (optional if you switch VISUAL_MAP to vhs:…)
-  terminal/rendered/*.mp4   ← VHS output (gitignored)
-  recordings/               ← per-segment + full-demo.mp4 (gitignored)
+  audio/                    ← TTS output (gitignored — intermediate)
+  text-rendered/            ← optional local ffmpeg cache (gitignored — intermediate)
+  terminal/*.tape           ← VHS **sources** (commit — small text scripts)
+  terminal/rendered/*.mp4   ← VHS renders (gitignored — intermediate)
+  recordings/               ← **only** final `*.mp4` from `compose.sh` — **commit** for GitHub Pages
 ```
+
+## Git: what belongs in the repo
+
+**Commit (sources + deliverables):**
+
+| Path | Role |
+|------|------|
+| `narration/*.md` | Spoken script input for TTS |
+| `visual-text/*.txt` | On-screen lines for default text visuals |
+| `terminal/*.tape` | Optional VHS source scripts |
+| `pages-site/` | Static HTML for GitHub Pages |
+| `compose.sh`, `generate-*.py`, `generate-all.sh`, `requirements*.txt` | Pipeline |
+| `recordings/*.mp4` | Final composed segments + `full-demo.mp4` (only binaries that should be remote) |
+
+**Do not commit (intermediates — see `.gitignore`):** `audio/`, `*.mp3`, `terminal/rendered/`, `text-rendered/`, any `*.mp4` outside `recordings/`, `.venv/`.
+
+If something was added by mistake: `git rm --cached -r path` then commit.
 
 ## Prerequisites
 
@@ -31,25 +48,22 @@ datadog-drilldown-video-docs/
 
 `OPENAI_API_KEY` is loaded from nested `.env` files with `setdefault`, then **repository root** `.env` is applied again with **overwrite** so a key you export in the shell does not hide an updated root `.env`. If TTS still returns **401**, rotate the key at [platform.openai.com](https://platform.openai.com/account/api-keys) — no quotes needed in `.env` (`OPENAI_API_KEY=sk-...`).
 
-## GitHub Pages (CI publish on `main`)
+## GitHub Pages (publish committed `recordings/` only)
 
 **Live site (after a green deploy):** **[https://menkelabs.github.io/datadog-drilldown/](https://menkelabs.github.io/datadog-drilldown/)**  
 **Workflow:** [video-docs-pages.yml](https://github.com/menkelabs/datadog-drilldown/actions/workflows/video-docs-pages.yml)
 
-When you push changes under **`datadog-drilldown-video-docs/`**, **[`.github/workflows/video-docs-pages.yml`](../../../.github/workflows/video-docs-pages.yml)** will:
+CI **does not** run TTS or `compose.sh`. It only copies **`pages-site/index.html`** and committed **`recordings/*.mp4`** into the Pages artifact.
 
-1. Install **ffmpeg** and Python deps  
-2. Run **OpenAI TTS** (`generate-narration.py`) — requires repository secret **`OPENAI_API_KEY`**  
-3. Run **`compose.sh`** (default **text** visuals)  
-4. Deploy **`pages-site/index.html`** plus **`recordings/*.mp4`** to **GitHub Pages**
+**Local → git → Pages**
 
-**One-time repo setup**
+1. From this directory: `./generate-all.sh` or `./compose.sh` (with `audio/*.mp3` present) so **`recordings/*.mp4`** and **`full-demo.mp4`** exist.  
+2. **`git add recordings/*.mp4`** and commit (they are **not** ignored; other `*.mp4` in this folder still are).  
+3. Push to **`main`**. The workflow runs when **`recordings/`**, **`pages-site/`**, or the workflow file changes.
 
-1. **Settings → Pages** → **Build and deployment** → **Source: GitHub Actions**.  
-2. **Optional — real voice on Pages:** **Settings → Secrets and variables → Actions** → **`OPENAI_API_KEY`**. If it’s missing, CI still succeeds: **silent MP3s** are generated with length estimated from each narration script (text visuals + silence).  
-3. After a successful run, open the **deploy** job for the public **Page URL** (e.g. `https://<org>.github.io/<repo>/`).
+**One-time repo setup:** **Settings → Pages** → **Source: GitHub Actions**. No **`OPENAI_API_KEY`** secret is required for Pages.
 
-> **Note:** A GitHub repository can only host **one** Pages site. If you already publish another site from this repo, either combine assets into a single workflow/site or use a dedicated repo for videos.
+> **Note:** One GitHub repo = one Pages site. If you use Pages for something else, merge sites or use another repo.
 
 ## Quick start
 

@@ -1,7 +1,15 @@
+# ── Local / secrets ─────────────────────────────────────────────
 .venv/
+.env
+
+# ── Intermediate pipeline outputs (never commit) ────────────────
+# Regenerate with generate-narration.py / VHS / compose.sh locally.
 audio/
 terminal/rendered/
-recordings/
+text-rendered/
 *.mp3
+
+# ── Video binaries ──────────────────────────────────────────────
+# Ignore all MP4 except final composed segments shipped for GitHub Pages.
 *.mp4
-.env
+!recordings/*.mp4

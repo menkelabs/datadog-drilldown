@@ -1,6 +1,6 @@
 # Documentation generator
 
-Templates and the **Datadog Drilldown** video bundle used to produce narrated demos and (via CI) **[GitHub Pages](https://menkelabs.github.io/datadog-drilldown/)**.
+Templates and the **Datadog Drilldown** video bundle. **[GitHub Pages](https://menkelabs.github.io/datadog-drilldown/)** deploys **pre-built** `recordings/*.mp4` from git (no video generation in CI).
 
 | Path | Purpose |
 |------|---------|
