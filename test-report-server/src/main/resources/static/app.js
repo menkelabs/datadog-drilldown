@@ -123,6 +123,54 @@ function loadSummary() {
         .catch(() => { el('summary').innerHTML = 'Could not load summary.'; });
 }
 
+function showSolverRunsStatus(msg, type = 'info') {
+    const s = el('solver-runs-status');
+    if (!s) return;
+    s.textContent = msg;
+    s.className = 'status ' + type;
+    s.hidden = !msg;
+}
+
+function renderSolverRuns(list) {
+    const div = el('solver-runs-table');
+    if (!div) return;
+    if (!list || !list.length) {
+        div.innerHTML = '<p class="muted-msg">No solver runs. Generate JSONL (e.g. <code>python dice-leap-poc/scripts/batch_sample.py</code>) then Sync or use Source → Files.</p>';
+        return;
+    }
+    div.innerHTML = `
+        <table>
+            <thead><tr><th>instance</th><th>mode</th><th>strategy</th><th>reason</th><th>n</th><th>objective</th><th>Δ vs base</th><th>ms</th><th>tier</th></tr></thead>
+            <tbody>
+                ${list.map(r => `
+                    <tr>
+                        <td>${escapeHtml(r.instanceId)}</td>
+                        <td>${escapeHtml(r.solverMode)}</td>
+                        <td>${escapeHtml(r.strategyChoice)}</td>
+                        <td title="${escapeHtml(r.strategyReason)}">${escapeHtml((r.strategyReason || '').slice(0, 48))}${(r.strategyReason || '').length > 48 ? '…' : ''}</td>
+                        <td>${r.nVars}</td>
+                        <td>${r.objective != null ? Number(r.objective).toFixed(3) : '–'}</td>
+                        <td>${r.vsBaselineDelta != null ? Number(r.vsBaselineDelta).toFixed(3) : '–'}</td>
+                        <td>${r.runtimeMs != null ? Math.round(r.runtimeMs) : '–'}</td>
+                        <td>${escapeHtml(r.tier || '')}</td>
+                    </tr>
+                `).join('')}
+            </tbody>
+        </table>
+    `;
+}
+
+function loadSolverRuns() {
+    const src = el('solver-runs-source')?.value || 'auto';
+    const lim = 200;
+    el('solver-runs-table').textContent = 'Loading…';
+    fetchJson(`${API}/solver-runs?limit=${lim}&source=${encodeURIComponent(src)}`)
+        .then(renderSolverRuns)
+        .catch(() => {
+            el('solver-runs-table').innerHTML = '<p class="error-msg">Could not load solver runs.</p>';
+        });
+}
+
 function loadSuggestions(syncToRunId = null) {
     const sel = el('suggestions-select');
     const contentEl = el('suggestions-content');
@@ -628,8 +676,23 @@ el('admin-clear-logs-mode')?.addEventListener('change', () => {
 
 initLinkButtons();
 
+el('refresh-solver-runs')?.addEventListener('click', () => loadSolverRuns());
+el('solver-runs-source')?.addEventListener('change', () => loadSolverRuns());
+el('solver-runs-sync-btn')?.addEventListener('click', () => {
+    showSolverRunsStatus('Syncing…', 'info');
+    postJson(API + '/solver-runs/sync', {})
+        .then(r => {
+            showSolverRunsStatus(`Synced ${r.inserted} row(s) into H2.`, 'ok');
+            loadSolverRuns();
+        })
+        .catch(err => {
+            showSolverRunsStatus('Sync failed: ' + err.message, 'err');
+        });
+});
+
 // Load suggestions first, then runs (so syncing works on initial load)
 loadSummary();
 loadSuggestions();
 // Delay run summaries slightly to ensure suggestions are loaded for syncing
 setTimeout(loadRunSummaries, 100);
+setTimeout(loadSolverRuns, 150);

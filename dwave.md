@@ -204,7 +204,7 @@ Track at least:
 
 **CI:** GitHub Actions workflow `.github/workflows/dice-leap-poc.yml` runs `pytest` with **no** Leap credentials and **no** `dwave-system` install. **test-report-server** has `.github/workflows/test-report-server.yml` for Maven tests.
 
-**Ingest:** Kotlin `SolveRecord` + JSONL reader under `embabel-dice-rca/.../dice/solver/`; optional `GET /api/solver-runs` on test-report-server over `dice-leap-poc/runs/*.jsonl`.
+**Ingest / UI:** Kotlin `SolveRecord` + JSONL reader under `embabel-dice-rca/.../dice/solver/`; test-report-server **`GET /api/solver-runs`** (auto/db/file) + **`POST /api/solver-runs/sync`** into H2 **`solver_runs`**, with a **web panel** to browse and sync.
 
 ---
 

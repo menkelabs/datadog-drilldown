@@ -37,9 +37,12 @@ When the UI runs tests, the server sets `TEST_RUN_ID` and `TEST_REPORT_DB_PATH` 
 
 ## API
 
-### DICE / QUBO solver runs (JSONL)
+### DICE / QUBO solver runs (JSONL + H2)
 
-- `GET /api/solver-runs?limit=500` — parse recent non-blank lines from all `*.jsonl` in `solver-runs.directory` (tail up to `limit`). No DB persistence (read-through L0/L1 files).
+- `GET /api/solver-runs?limit=500&source=auto|db|file` — **`auto`** (default): read H2 `solver_runs` if non-empty, else JSONL files. **`db`**: H2 only. **`file`**: JSONL only.
+- `POST /api/solver-runs/sync` — body `{}`. Truncates `solver_runs` and re-imports every line from all `*.jsonl` under `solver-runs.directory`. Returns `{ "inserted": N }`.
+
+**UI:** “DICE / QUBO solver runs” card — refresh, source selector, **Sync JSONL → H2**. **Reset DB** (admin) also `DELETE`s `solver_runs`.
 
 ### Test runs (H2)
 

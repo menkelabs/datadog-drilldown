@@ -55,5 +55,27 @@ class SchemaInitializer(private val jdbc: JdbcTemplate) {
         } catch (e: Exception) {
             log.warn("Schema init skipped: {}", e.message)
         }
+
+        val solverDdl =
+            """
+            CREATE TABLE IF NOT EXISTS solver_runs (
+              id BIGINT AUTO_INCREMENT PRIMARY KEY,
+              instance_id VARCHAR(256) NOT NULL,
+              raw_json CLOB NOT NULL,
+              synced_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """.trimIndent()
+        try {
+            jdbc.execute(solverDdl)
+            try {
+                jdbc.execute("CREATE INDEX idx_solver_runs_instance_id ON solver_runs(instance_id)")
+            } catch (_: Exception) {
+                /* index may already exist */
+            }
+            log.info("solver_runs schema initialized")
+        } catch (e: Exception) {
+            log.warn("solver_runs schema init skipped: {}", e.message)
+        }
     }
 }
+

@@ -8,7 +8,7 @@ These JSON instances exist to **simulate when switching from a cheap heuristic t
 | **`complex_dw_md.json`** | **Tier `complex`** → strategy **qubo**; greedy baseline is **worse** than optimized energy (simulates “optimization pays off”). |
 | **`below_rollover_n12_e8.json`** | **No `tier`** — at the **upper bound** of heuristic-only: `n=12` candidates, `8` constraint edges (not above thresholds). |
 | **`rollover_n13.json`** | **No `tier`** — **`n=13 > 12`** triggers **metrics rollover** → **qubo**; conflicts tuned so **SA beats greedy** by ~2+ energy (not just strategy flip). |
-| **`rollover_edges9.json`** | **No `tier`** — **`n=10`**, **`9` edges > 8** → **qubo** (dense-interaction / constraint-edge story). |
+| **`rollover_edges9.json`** | **No `tier`** — **`9` edges > 8** → **qubo**; tuned so **SA beats greedy** by ~2.5+ energy (same narrative as `rollover_n13`). |
 
 Rollover rules in code: [`dice_leap_poc/strategy.py`](../dice_leap_poc/strategy.py) (`RolloverConfig`).
 

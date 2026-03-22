@@ -50,6 +50,28 @@
                 <div id="summary" class="summary">Loading…</div>
             </section>
 
+            <section class="card" id="solver-runs-section">
+                <h2>DICE / QUBO solver runs <button type="button" id="refresh-solver-runs" class="refresh-btn"
+                        title="Refresh">↻</button></h2>
+                <p class="admin-hint"><code>dice-leap-poc</code> <code>SolveRecord</code> JSONL under
+                    <code>solver-runs.directory</code> (default <code>../dice-leap-poc/runs</code>).
+                    <strong>Sync to DB</strong> loads all <code>*.jsonl</code> lines into H2 table
+                    <code>solver_runs</code> (clears table first). Reset DB (below) also clears solver runs.</p>
+                <div class="form-row solver-runs-toolbar">
+                    <button type="button" id="solver-runs-sync-btn" class="secondary-btn">Sync JSONL → H2</button>
+                    <label>Source
+                        <select id="solver-runs-source">
+                            <option value="auto">Auto (DB if non-empty, else files)</option>
+                            <option value="db">Database only</option>
+                            <option value="file">Files only</option>
+                        </select>
+                    </label>
+                </div>
+                <div id="solver-runs-status" class="status" aria-live="polite" hidden></div>
+                <div id="solver-runs-table" class="runs-list"
+                    style="max-height: 280px; overflow-y: auto; overflow-x: auto;">Loading…</div>
+            </section>
+
             <section class="card">
                 <h2>Recent runs <button type="button" id="refresh-runs" class="refresh-btn" title="Refresh">↻</button>
                 </h2>

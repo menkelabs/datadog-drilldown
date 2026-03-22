@@ -1,5 +1,6 @@
 package com.example.testreport.service
 
+import com.example.testreport.repository.SolverRunsRepository
 import com.example.testreport.repository.TestRunRepository
 import java.io.File
 import java.time.Instant
@@ -17,6 +18,7 @@ data class ClearLogsResult(val logsDeleted: Int, val analysisDeleted: Int)
 @Service
 class AdminService(
         private val repo: TestRunRepository,
+        private val solverRunsRepository: SolverRunsRepository,
         @Value("\${run-tests.project-root:..}") private val projectRoot: String,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
@@ -63,7 +65,9 @@ class AdminService(
      * analysis files (run-*-analysis.md, analysis-suggestions-*.md) in test-reports.
      */
     fun resetDb(clearLogs: Boolean): ResetDbResult {
+        val solverDeleted = solverRunsRepository.deleteAll()
         val deleted = repo.deleteAll()
+        log.info("Reset DB: deleted {} solver_runs rows", solverDeleted)
         var logsDeleted = 0
         var analysisDeleted = 0
         if (clearLogs) {

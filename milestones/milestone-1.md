@@ -1,6 +1,6 @@
 # Milestone 1 — D-Wave / QUBO PoC & synthetic dataset
 
-**Status:** **Phase 1 + M1a/M1b complete** — local + optional Leap path (`solver_mode`), GitHub Actions for `dice-leap-poc`, tiered fixtures, strategy rollover, pytest. **Next:** optional L1/L2 persistence, Kotlin ingest, real-data instrumentation per metrics doc.  
+**Status:** **Phase 1 + M1a/M1b complete** — local + optional Leap path (`solver_mode`), GitHub Actions for `dice-leap-poc`, tiered fixtures, strategy rollover, pytest. **Next:** real-data instrumentation per metrics doc; optional richer UI / retention policies.  
 **Spec reference:** [dwave.md](../dwave.md) (reformatted spec + diagrams)  
 **Implementation:** [dice-leap-poc/README.md](../dice-leap-poc/README.md)  
 **Last plan iteration:** 2026-01-24 (pass 3) — M1a/M1b **implemented** (CI workflow, `solver_mode`, Leap adapter, docs).
@@ -69,7 +69,7 @@ Details: [§ CI workflow spec](#ci-workflow-spec-m1a), [§ Leap adapter conventi
 
 ### Later / optional
 
-- [ ] **persist-l2** — Optional H2 table `solver_runs` for long retention; **lite** read API exists: `GET /api/solver-runs` on [test-report-server](../test-report-server/README.md) over JSONL directory.
+- [x] **persist-l2 (lite)** — H2 **`solver_runs`** + `POST /api/solver-runs/sync` + UI panel; cleared with admin **Reset DB**. See [test-report-server README](../test-report-server/README.md).
 - [x] **persist-l1** — Script `dice-leap-poc/scripts/mirror_jsonl_l1.py` copies `runs/*.jsonl` → `embabel-dice-rca/test-reports/solver-runs/` (dir gitignored; manual or CI artifact).
 - [x] **contract-evolution** — `encoding_version` on `SolveRecord` + optional instance JSON field; default `1` in `record.py`; schema updated.
 - [x] **kotlin-ingest** — `com.example.rca.dice.solver.SolveRecord` + `SolveRecordJsonlReader` in [embabel-dice-rca](../embabel-dice-rca/) (Jackson, snake_case); unit test `SolveRecordJsonlReaderTest`.
