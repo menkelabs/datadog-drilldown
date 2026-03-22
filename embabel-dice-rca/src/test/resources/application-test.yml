@@ -10,12 +10,6 @@ datadog:
   app-key: ""
   site: datadoghq.com
 
-# Embabel configuration for tests
-embabel:
-  api-key: ""
-  model: gpt-4-mock
-  temperature: 0.0
-
 # Dice configuration for tests
 dice:
   ingestion:

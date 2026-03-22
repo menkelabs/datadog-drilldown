@@ -21,7 +21,7 @@ import java.time.Instant
  * - POST /api/v1/contexts/{contextId}/query - Query for reasoning/answer
  */
 @Component
-open class DiceClient(
+class DiceClient(
     @Value("\${dice.server.url:http://localhost:8080}") private val diceServerUrl: String,
     restTemplateBuilder: RestTemplateBuilder = RestTemplateBuilder()
 ) {
@@ -40,7 +40,7 @@ open class DiceClient(
      * Request: IngestRequest(documentId, text, metadata?)
      * Response: IngestResponse(documentId, propositionsExtracted, status, message?)
      */
-    open fun ingest(contextId: String, documentId: String, text: String, metadata: Map<String, Any> = emptyMap()): IngestResponse {
+    fun ingest(contextId: String, documentId: String, text: String, metadata: Map<String, Any> = emptyMap()): IngestResponse {
         val url = "$diceServerUrl/api/v1/contexts/$contextId/ingest"
         val request = IngestRequest(documentId = documentId, text = text, metadata = metadata)
         
@@ -64,7 +64,7 @@ open class DiceClient(
      * Request: { "question": "..." }
      * Response: { "answer": "..." }
      */
-    open fun query(contextId: String, question: String): String {
+    fun query(contextId: String, question: String): String {
         val url = "$diceServerUrl/api/v1/contexts/$contextId/query"
         val request = mapOf("question" to question)
         
@@ -89,7 +89,7 @@ open class DiceClient(
      * Query params: status? (filter), limit (default 50)
      * Response: { "propositions": [...] }
      */
-    open fun listPropositions(contextId: String, status: String? = null, limit: Int = 50): List<DiceProposition> {
+    fun listPropositions(contextId: String, status: String? = null, limit: Int = 50): List<DiceProposition> {
         var url = "$diceServerUrl/api/v1/contexts/$contextId/memory?limit=$limit"
         if (status != null) url += "&status=$status"
         
@@ -113,7 +113,7 @@ open class DiceClient(
      * Request: SearchRequest(query, topK, similarityThreshold?, filters?)
      * Response: { "propositions": [...] }
      */
-    open fun searchPropositions(
+    fun searchPropositions(
         contextId: String,
         query: String,
         topK: Int = 10,
@@ -147,7 +147,7 @@ open class DiceClient(
      * API: GET /api/v1/contexts/{contextId}/memory/{id}
      * Response: Proposition or null
      */
-    open fun getProposition(contextId: String, propositionId: String): DiceProposition? {
+    fun getProposition(contextId: String, propositionId: String): DiceProposition? {
         val url = "$diceServerUrl/api/v1/contexts/$contextId/memory/$propositionId"
         
         return try {
@@ -164,7 +164,7 @@ open class DiceClient(
      * 
      * API: DELETE /api/v1/contexts/{contextId}/memory/{id}
      */
-    open fun deleteProposition(contextId: String, propositionId: String): Boolean {
+    fun deleteProposition(contextId: String, propositionId: String): Boolean {
         val url = "$diceServerUrl/api/v1/contexts/$contextId/memory/$propositionId"
         
         return try {
@@ -182,7 +182,7 @@ open class DiceClient(
      * 
      * API: DELETE /api/v1/contexts/{contextId}/memory
      */
-    open fun deleteContext(contextId: String): Boolean {
+    fun deleteContext(contextId: String): Boolean {
         val url = "$diceServerUrl/api/v1/contexts/$contextId/memory"
         
         return try {
@@ -207,7 +207,7 @@ open class DiceClient(
      * API: DELETE /api/v1/contexts
      * WARNING: This deletes ALL data in dice-server!
      */
-    open fun clearAll(): Boolean {
+    fun clearAll(): Boolean {
         val url = "$diceServerUrl/api/v1/contexts"
         
         return try {
