@@ -1,0 +1,23 @@
+{
+  "instance_id": "rollover_n13",
+  "description": "No tier: 13 candidates (>12) triggers metrics rollover to qubo — simulates dwave.md candidate_count trigger.",
+  "entities": [
+    { "id": "C0", "cost": 1.0, "signal": 2.0 },
+    { "id": "C1", "cost": 1.05, "signal": 1.95 },
+    { "id": "C2", "cost": 1.1, "signal": 2.05 },
+    { "id": "C3", "cost": 0.95, "signal": 2.1 },
+    { "id": "C4", "cost": 1.15, "signal": 1.9 },
+    { "id": "C5", "cost": 1.0, "signal": 2.0 },
+    { "id": "C6", "cost": 1.08, "signal": 1.98 },
+    { "id": "C7", "cost": 1.12, "signal": 2.02 },
+    { "id": "C8", "cost": 0.98, "signal": 2.08 },
+    { "id": "C9", "cost": 1.06, "signal": 1.96 },
+    { "id": "C10", "cost": 1.02, "signal": 2.04 },
+    { "id": "C11", "cost": 1.09, "signal": 1.99 },
+    { "id": "C12", "cost": 1.03, "signal": 2.01 }
+  ],
+  "conflicts": [],
+  "dependencies": [],
+  "conflict_penalty": 5.0,
+  "dependency_penalty": 10.0
+}

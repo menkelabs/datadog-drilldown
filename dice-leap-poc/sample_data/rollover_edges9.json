@@ -1,0 +1,30 @@
+{
+  "instance_id": "rollover_edges9",
+  "description": "No tier: 10 candidates but 9 constraint edges (>8) triggers rollover — simulates dense interaction graph without huge n.",
+  "entities": [
+    { "id": "N0", "cost": 1.0, "signal": 2.0 },
+    { "id": "N1", "cost": 1.1, "signal": 1.9 },
+    { "id": "N2", "cost": 1.2, "signal": 2.1 },
+    { "id": "N3", "cost": 1.0, "signal": 2.0 },
+    { "id": "N4", "cost": 1.15, "signal": 1.85 },
+    { "id": "N5", "cost": 1.05, "signal": 1.95 },
+    { "id": "N6", "cost": 1.12, "signal": 2.02 },
+    { "id": "N7", "cost": 0.98, "signal": 2.08 },
+    { "id": "N8", "cost": 1.08, "signal": 1.92 },
+    { "id": "N9", "cost": 1.02, "signal": 2.05 }
+  ],
+  "conflicts": [
+    ["N0", "N1"],
+    ["N1", "N2"],
+    ["N2", "N3"],
+    ["N3", "N4"],
+    ["N4", "N5"],
+    ["N5", "N6"],
+    ["N6", "N7"],
+    ["N7", "N8"],
+    ["N8", "N9"]
+  ],
+  "dependencies": [],
+  "conflict_penalty": 7.0,
+  "dependency_penalty": 10.0
+}

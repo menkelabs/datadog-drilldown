@@ -200,7 +200,7 @@ Track at least:
 | **2** | D-Wave Leap via `LeapHybridSampler` + `solver_mode` (`local_classical` / `leap_hybrid`) | **In progress** — optional `[leap]` extra; CI stays local-only |
 | **3** | Realistic synthetic data (≈15–30 entities + constraints): triggers vs baseline | **Largely done** in PoC fixtures; refine with real cases later |
 
-**Repo layout:** `dice-leap-poc/` — strategy, compiler, solvers (`solve_local`, `solve_leap`), pipeline, tests, `sample_data/`. *(See [dice-leap-poc/README.md](dice-leap-poc/README.md) and [milestones/milestone-1.md](milestones/milestone-1.md).)*
+**Repo layout:** `dice-leap-poc/` — strategy, compiler, solvers (`solve_local`, `solve_leap`), pipeline, tests, **`sample_data/`** with fixtures that **simulate rollover** (tier simple/complex + metric boundaries at `n>12` / `edges>8`). *(See [dice-leap-poc/sample_data/README.md](dice-leap-poc/sample_data/README.md), [dice-leap-poc/README.md](dice-leap-poc/README.md), [milestones/milestone-1.md](milestones/milestone-1.md).)*
 
 **CI:** GitHub Actions workflow `.github/workflows/dice-leap-poc.yml` runs `pytest` with **no** Leap credentials and **no** `dwave-system` install.
 

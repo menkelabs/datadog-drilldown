@@ -1,0 +1,31 @@
+{
+  "instance_id": "below_rollover_n12_e8",
+  "description": "No tier: n=12 and 8 edges — at heuristic ceiling (not above rollover thresholds).",
+  "entities": [
+    { "id": "E0", "cost": 1.0, "signal": 2.0 },
+    { "id": "E1", "cost": 1.1, "signal": 1.9 },
+    { "id": "E2", "cost": 1.2, "signal": 2.1 },
+    { "id": "E3", "cost": 1.0, "signal": 2.2 },
+    { "id": "E4", "cost": 1.3, "signal": 1.8 },
+    { "id": "E5", "cost": 1.1, "signal": 2.0 },
+    { "id": "E6", "cost": 1.2, "signal": 1.9 },
+    { "id": "E7", "cost": 1.0, "signal": 2.1 },
+    { "id": "E8", "cost": 1.4, "signal": 1.7 },
+    { "id": "E9", "cost": 1.0, "signal": 2.3 },
+    { "id": "E10", "cost": 1.1, "signal": 2.0 },
+    { "id": "E11", "cost": 1.2, "signal": 1.8 }
+  ],
+  "conflicts": [
+    ["E0", "E1"],
+    ["E1", "E2"],
+    ["E2", "E3"],
+    ["E3", "E4"],
+    ["E4", "E5"],
+    ["E5", "E6"],
+    ["E6", "E7"],
+    ["E7", "E8"]
+  ],
+  "dependencies": [],
+  "conflict_penalty": 6.0,
+  "dependency_penalty": 10.0
+}

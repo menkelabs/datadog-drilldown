@@ -2,6 +2,8 @@
 
 Python prototype: structured decision instances → **QUBO** → **local classical** solve (dwave-neal simulated annealing), with an optional **Leap hybrid** path (`dwave-system`).
 
+**Goal:** [Sample fixtures](sample_data/README.md) simulate **when rollover to a QUBO/D-Wave-class solve makes sense** vs staying on the greedy heuristic (tier labels + `n`/edge thresholds from [dwave.md](../dwave.md)).
+
 **Spec / roadmap:** [dwave.md](../dwave.md) · [milestones/milestone-1.md](../milestones/milestone-1.md)
 
 ## Install

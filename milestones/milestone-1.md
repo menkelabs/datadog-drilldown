@@ -23,7 +23,7 @@ Use this as the baseline for future iterations:
 | Batch + tier aggregates | `dice_leap_poc/batch.py`, `scripts/batch_sample.py` |
 | L1 JSONL mirror | `scripts/mirror_jsonl_l1.py` → `embabel-dice-rca/test-reports/solver-runs/` |
 | Encoding contract | `SolveRecord.encoding_version` (default `1`), optional on instance JSON |
-| Fixtures | `sample_data/toy_dw_md.json` (simple), `sample_data/complex_dw_md.json` (18 vars, QUBO win vs greedy) |
+| Fixtures | `sample_data/` — see [sample_data/README.md](../dice-leap-poc/sample_data/README.md): tiered simple/complex + **rollover boundaries** (`below_rollover_n12_e8`, `rollover_n13`, `rollover_edges9`) to simulate when QUBO/D-Wave path is justified |
 | Schema | `dice-leap-poc/schemas/solve_record.schema.json` |
 | Tests | `tests/test_mvp.py`, `tests/test_acceptance.py`, `tests/test_leap.py` (Leap smoke optional) |
 | Real-world metrics **plan** (doc only) | [docs/DWAVE_REAL_WORLD_METRICS.md](../docs/DWAVE_REAL_WORLD_METRICS.md) |

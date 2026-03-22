@@ -14,6 +14,9 @@ from dice_leap_poc.strategy import RolloverConfig, plan_strategy
 ROOT = Path(__file__).resolve().parents[1]
 TOY = ROOT / "sample_data" / "toy_dw_md.json"
 COMPLEX = ROOT / "sample_data" / "complex_dw_md.json"
+BELOW_ROLLOVER = ROOT / "sample_data" / "below_rollover_n12_e8.json"
+ROLLOVER_N13 = ROOT / "sample_data" / "rollover_n13.json"
+ROLLOVER_EDGES9 = ROOT / "sample_data" / "rollover_edges9.json"
 
 # Tuned with synthetic complex fixture (greedy vs brute margin ~2.03); SA uses 10k reads.
 COMPLEX_MIN_MARGIN = 1.5
@@ -106,3 +109,27 @@ def test_iter_fixture_paths_includes_toy():
     found = {p.name for p in iter_fixture_paths(ROOT / "sample_data")}
     assert "toy_dw_md.json" in found
     assert "complex_dw_md.json" in found
+    assert "below_rollover_n12_e8.json" in found
+    assert "rollover_n13.json" in found
+    assert "rollover_edges9.json" in found
+
+
+def test_rollover_dataset_metrics_boundaries():
+    """Simulate dwave-style triggers: just below ceiling = heuristic; above = qubo."""
+    below = Instance.load_json(BELOW_ROLLOVER)
+    c_b, r_b = plan_strategy(below)
+    assert c_b == "heuristic_only"
+    assert "below_rollover" in r_b
+    assert "n=12" in r_b and "edges=8" in r_b
+
+    n13 = Instance.load_json(ROLLOVER_N13)
+    c_n, r_n = plan_strategy(n13)
+    assert c_n == "qubo"
+    assert "rollover_metrics" in r_n
+    assert "n=13" in r_n
+
+    e9 = Instance.load_json(ROLLOVER_EDGES9)
+    c_e, r_e = plan_strategy(e9)
+    assert c_e == "qubo"
+    assert "rollover_metrics" in r_e
+    assert "edges=9" in r_e
