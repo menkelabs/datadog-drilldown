@@ -35,13 +35,13 @@ The system consists of two primary Kotlin/Spring Boot modules:
 - **AI Parameter Tuning**: Track which parameter combinations (model, temperature, keywords) improve detection success across scenarios.
 - **Analysis Dashboard**: View test summaries, filter by scenario/status, and analyze trends over time.
 
-## Roadmap: QUBO / D-Wave PoC (Milestone 1)
+## Roadmap: QUBO / D-Wave
 
-Exploratory work to treat **structured decision problems** as **QUBO** instances, solve them with **D-Wave Ocean** (local classical samplers first, optional **Leap** later), and feed results back into a reasoning-style loop—aligned with **[dwave.md](dwave.md)**.
+**Milestone 1 (done):** PoC in **[dice-leap-poc/](dice-leap-poc/)** — QUBO compile, local SA, optional Leap, tiered/rollover fixtures, pytest, `SolveRecord` contract, JSONL + H2 lite + test-report UI, Kotlin JSONL types. See **[milestones/milestone-1.md](milestones/milestone-1.md)** and **[dwave.md](dwave.md)**.
 
-**Status:** Phase 1 Python PoC (`dice-leap-poc/`) includes local SA, **tiered fixtures**, **strategy rollover**, batch JSONL, and pytest acceptance. **Leap** and optional H2/UI wiring remain deferred.
+**Milestone 2 (next):** Live **DICE/RCA → QUBO** wiring in **`embabel-dice-rca`**, **telemetry** for real-world metrics (beyond the doc), **solver as an agent DAG node**, **opt-in Leap CI**, optional **Maven parent + umbrella Java CI**. See **[milestones/milestone-2.md](milestones/milestone-2.md)**.
 
-**Docs:** **[milestones/milestone-1.md](milestones/milestone-1.md)** · **[dice-leap-poc/README.md](dice-leap-poc/README.md)** · **[docs/DWAVE_REAL_WORLD_METRICS.md](docs/DWAVE_REAL_WORLD_METRICS.md)** (pilot logging plan).
+**Docs:** **[docs/DWAVE_REAL_WORLD_METRICS.md](docs/DWAVE_REAL_WORLD_METRICS.md)** (pilot logging plan; M2 implements emission).
 
 ## Setup
 

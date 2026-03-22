@@ -206,6 +206,8 @@ Track at least:
 
 **Ingest / UI:** Kotlin `SolveRecord` + JSONL reader under `embabel-dice-rca/.../dice/solver/`; test-report-server **`GET /api/solver-runs`** (auto/db/file) + **`POST /api/solver-runs/sync`** into H2 **`solver_runs`**, with a **web panel** to browse and sync.
 
+**Next:** [milestones/milestone-2.md](milestones/milestone-2.md) — live RCA→QUBO wiring in agents, metrics implementation, solver as DAG node, opt-in Leap CI, Maven umbrella.
+
 ---
 
 ## Leap setup (Phase 2)
