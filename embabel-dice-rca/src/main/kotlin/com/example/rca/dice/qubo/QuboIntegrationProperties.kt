@@ -15,6 +15,17 @@ data class QuboIntegrationProperties(
      */
     val diceLeapPocRoot: String = "",
     val subprocessTimeoutSeconds: Long = 120,
+    /** Subprocess attempts before giving up (M2c). */
+    val maxSubprocessAttempts: Int = 2,
+    /** Delay between subprocess attempts (ms). */
+    val subprocessRetryDelayMs: Long = 200,
     /** When true, enrichment throws if the subprocess fails; when false, attaches error details under findings.qubo. */
     val failOnSolverError: Boolean = false,
+    /**
+     * When subprocess fails and [failOnSolverError] is false, fill `selected_candidate_titles` from top RCA candidates (M2c fallback).
+     */
+    val fallbackOnSolverFailure: Boolean = true,
+    val fallbackCandidateCount: Int = 3,
+    /** Emit `qubo_telemetry` structured log lines when QUBO path runs or skips (M2b). */
+    val structuredTelemetryLog: Boolean = true,
 )

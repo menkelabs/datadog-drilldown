@@ -1,0 +1,35 @@
+name: Java modules (reactor)
+
+on:
+  pull_request:
+    paths:
+      - "pom.xml"
+      - "embabel-dice-rca/**"
+      - "dice-server/**"
+      - "test-report-server/**"
+      - ".github/workflows/java-modules.yml"
+  push:
+    branches: [main]
+    paths:
+      - "pom.xml"
+      - "embabel-dice-rca/**"
+      - "dice-server/**"
+      - "test-report-server/**"
+      - ".github/workflows/java-modules.yml"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: "21"
+          distribution: temurin
+          cache: maven
+
+      - name: Maven test (full reactor)
+        run: mvn -q test
+        working-directory: .

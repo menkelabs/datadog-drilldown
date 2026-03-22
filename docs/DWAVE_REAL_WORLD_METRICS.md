@@ -2,7 +2,8 @@
 
 **Status:** Planning doc (Milestone 1). Implement collection **after** PoC acceptance on synthetic tiered data.
 
-**Related:** [dwave.md](../dwave.md), [milestones/milestone-1.md](../milestones/milestone-1.md), [dice-leap-poc/README.md](../dice-leap-poc/README.md).
+**Related:** [dwave.md](../dwave.md), [milestones/milestone-1.md](../milestones/milestone-1.md), [dice-leap-poc/README.md](../dice-leap-poc/README.md).  
+**Implemented v1 (JVM):** [QUBO_METRICS_V1.md](QUBO_METRICS_V1.md) (Milestone 2b).
 
 ## 1. Problem / context
 

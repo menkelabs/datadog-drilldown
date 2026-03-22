@@ -1,0 +1,40 @@
+# Optional Leap / hybrid smoke — does NOT run on forks without secrets (B2/B3).
+name: dice-leap-poc Leap (optional)
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "dice-leap-poc/**"
+      - ".github/workflows/dice-leap-poc-leap.yml"
+
+jobs:
+  leap-smoke:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || (github.event.pull_request.head.repo.full_name == github.repository)
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: dice-leap-poc/requirements.txt
+
+      - name: Install with Leap extras
+        if: ${{ secrets.DWAVE_API_TOKEN != '' }}
+        working-directory: dice-leap-poc
+        run: |
+          python -m pip install -U pip
+          pip install -e ".[dev,leap]"
+
+      - name: Leap-marked tests
+        if: ${{ secrets.DWAVE_API_TOKEN != '' }}
+        working-directory: dice-leap-poc
+        env:
+          DWAVE_API_TOKEN: ${{ secrets.DWAVE_API_TOKEN }}
+        run: pytest tests/test_leap.py -m leap -q --tb=short
+
+      - name: Skip notice
+        if: ${{ secrets.DWAVE_API_TOKEN == '' }}
+        run: echo "DWAVE_API_TOKEN not set — skipping Leap tests (expected for forks / local clones)."

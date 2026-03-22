@@ -1,6 +1,6 @@
 # Milestone 2 — Live DICE / RCA integration, ops hardening, agent DAG
 
-**Status:** Planned  
+**Status:** M2a–M2d first pass complete (hardening / OTel / full Embabel DAG wiring may follow)  
 **Builds on:** [Milestone 1](milestone-1.md) (PoC, contract, optional Leap, JSONL/H2 lite, Kotlin ingest types)  
 **Spec:** [dwave.md](../dwave.md) · Metrics plan: [docs/DWAVE_REAL_WORLD_METRICS.md](../docs/DWAVE_REAL_WORLD_METRICS.md)
 
@@ -57,24 +57,24 @@ Close the gap between **synthetic PoC** and **production-shaped** behavior:
 
 ### M2b — Observability (metrics implementation)
 
-- [ ] **C1 — Field list** — Freeze v1 minimum from [DWAVE_REAL_WORLD_METRICS.md](../docs/DWAVE_REAL_WORLD_METRICS.md) (case id, encoding version, strategy, solver mode, latencies, deltas, errors).
-- [ ] **C2 — Emit** — Log / OTel / Micrometer (or structured logs) from JVM when solver runs; align with JSONL/H2 if duplicated.
-- [ ] **C3 — Dashboards / queries** — Optional: Datadog facets / Grafana; document example queries in repo.
+- [x] **C1 — Field list** — [docs/QUBO_METRICS_V1.md](../docs/QUBO_METRICS_V1.md) freezes v1 fields (aligned with [DWAVE_REAL_WORLD_METRICS.md](../docs/DWAVE_REAL_WORLD_METRICS.md)).
+- [x] **C2 — Emit** — `qubo_telemetry` structured log lines + Micrometer `qubo.subprocess` / `qubo.enrichment` from `QuboReportEnricher` / `DiceLeapPythonSolver`.
+- [x] **C3 — Dashboards / queries** — Datadog / PromQL examples in [QUBO_METRICS_V1.md](../docs/QUBO_METRICS_V1.md).
 
 ### M2c — Agent DAG node & resilience
 
-- [ ] **D1 — Workflow model** — Identify Embabel/DICE orchestration; define solver **inputs/outputs** (instance in → `SolveRecord` out).
-- [ ] **D2 — Idempotency & timeouts** — Retries, cancellation, **fallback** to heuristic on failure (prod may differ from M1 fail-fast).
-- [ ] **D3 — Node observability** — Spans/metrics at node boundary (feeds **M2b**).
+- [x] **D1 — Workflow model** — [docs/QUBO_DAG_NODE.md](../docs/QUBO_DAG_NODE.md) documents inputs/outputs (instance → `SolveRecord` → `findings.qubo`).
+- [x] **D2 — Idempotency & timeouts** — Subprocess timeout, `max-subprocess-attempts`, retry delay; **fallback** top-N candidates when solver fails (`fallback-on-solver-failure`).
+- [x] **D3 — Node observability** — Micrometer timers/counters at subprocess boundary (OTel span optional later).
 
 ### M2d — Leap CI + Maven / CI umbrella
 
-- [ ] **B1 — Document** — Token setup, quota, when Leap vs local SA.
-- [ ] **B2 — Optional workflow** — `workflow_dispatch` or secret-gated job; `pytest -m leap` or smoke; **skip** if no `DWAVE_API_TOKEN`.
-- [ ] **B3 — Policy** — Default required checks remain **local-only** unless team promotes Leap job.
-- [ ] **E1 — Parent POM (optional)** — Root `pom.xml` with `<modules>`: `embabel-dice-rca`, `dice-server`, `test-report-server` (`dice-leap-poc` stays Python).
-- [ ] **E2 — Unified workflow** — e.g. `.github/workflows/java-modules.yml`: `mvn` test, cache, Java 21.
-- [ ] **E3 — Path strategy** — Full reactor vs path filters / `dorny/paths-filter` (team choice).
+- [x] **B1 — Document** — [dice-leap-poc/README.md](../dice-leap-poc/README.md) Leap section + workflow comments (token, optional job).
+- [x] **B2 — Optional workflow** — [.github/workflows/dice-leap-poc-leap.yml](../.github/workflows/dice-leap-poc-leap.yml) (`workflow_dispatch` + PR path filter; skips when no `DWAVE_API_TOKEN`).
+- [x] **B3 — Policy** — Leap workflow is **non-required** / opt-in; default PR checks remain [dice-leap-poc.yml](../.github/workflows/dice-leap-poc.yml) local-only.
+- [x] **E1 — Parent POM** — Root [pom.xml](../pom.xml) aggregates `embabel-dice-rca`, `dice-server`, `test-report-server`.
+- [x] **E2 — Unified workflow** — [.github/workflows/java-modules.yml](../.github/workflows/java-modules.yml) full reactor `mvn test`, Java 21, Maven cache.
+- [x] **E3 — Path strategy** — Path filters on `pom.xml` + each module + workflow file (full reactor when any Java module changes).
 
 ---
 
@@ -106,6 +106,8 @@ Close the gap between **synthetic PoC** and **production-shaped** behavior:
 
 - [milestone-1.md](milestone-1.md)  
 - [dwave.md](../dwave.md)  
+- [docs/QUBO_METRICS_V1.md](../docs/QUBO_METRICS_V1.md)  
+- [docs/QUBO_DAG_NODE.md](../docs/QUBO_DAG_NODE.md)  
 - [dice-leap-poc/README.md](../dice-leap-poc/README.md)  
 - [test-report-server/README.md](../test-report-server/README.md)  
 
@@ -116,3 +118,4 @@ Close the gap between **synthetic PoC** and **production-shaped** behavior:
 - **2026-01-25:** Milestone 2 drafted (gap analysis).
 - **2026-01-25:** Split into **M2a–M2d** phases with exit criteria and checklist mapping.
 - **2026-01-25:** M2a first slice: subprocess bridge, mapper, enricher, `solve_json.py`, ADR 0002.
+- **2026-01-25:** M2b–M2d: `QUBO_METRICS_V1` + Micrometer, `QUBO_DAG_NODE`, retries/fallback, root `pom.xml`, `java-modules.yml`, optional `dice-leap-poc-leap.yml`.

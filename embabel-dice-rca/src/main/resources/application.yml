@@ -19,7 +19,12 @@ embabel:
       python-executable: python3
       dice-leap-poc-root: ${DICE_LEAP_POC_ROOT:}
       subprocess-timeout-seconds: 120
+      max-subprocess-attempts: 2
+      subprocess-retry-delay-ms: 200
       fail-on-solver-error: false
+      fallback-on-solver-failure: true
+      fallback-candidate-count: 3
+      structured-telemetry-log: true
 
   # Agent framework settings
   agent:

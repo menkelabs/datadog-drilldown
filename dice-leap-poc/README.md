@@ -21,7 +21,11 @@ pip install -r requirements.txt
 pip install -e ".[dev]"
 ```
 
-**Optional Leap (Phase 2):**
+**Optional Leap (Phase 2 / M2d):**
+
+- **When to use:** Cloud hybrid sampler for larger BQMs or when you want D-Wave-managed hybrid instead of local simulated annealing. **Default dev/CI:** stay on `local_classical` (no token, no quota).
+- **Token:** `export DWAVE_API_TOKEN="..."` or `dwave setup`. Respect org quota and cost policies.
+- **CI:** Required checks use [`.github/workflows/dice-leap-poc.yml`](../.github/workflows/dice-leap-poc.yml) (no Leap). Optional [`.github/workflows/dice-leap-poc-leap.yml`](../.github/workflows/dice-leap-poc-leap.yml) runs `pytest -m leap` only when repo secret `DWAVE_API_TOKEN` is set (plus manual `workflow_dispatch`).
 
 ```bash
 pip install -e ".[dev,leap]"
@@ -108,7 +112,8 @@ pytest tests/ -q
 
 ## CI
 
-Repository workflow [`.github/workflows/dice-leap-poc.yml`](../.github/workflows/dice-leap-poc.yml) installs `requirements.txt` only and runs `pytest` on changes under `dice-leap-poc/`.
+- **Default:** [`.github/workflows/dice-leap-poc.yml`](../.github/workflows/dice-leap-poc.yml) installs `requirements.txt` only and runs `pytest` on changes under `dice-leap-poc/` (no Leap).
+- **Optional Leap:** [`.github/workflows/dice-leap-poc-leap.yml`](../.github/workflows/dice-leap-poc-leap.yml) — opt-in; needs secret `DWAVE_API_TOKEN`.
 
 ## SolveRecord
 
