@@ -1,9 +1,9 @@
 # Milestone 1 — D-Wave / QUBO PoC & synthetic dataset
 
-**Status:** **Phase 1 (local) complete** — tiered fixtures, strategy rollover, pytest acceptance, JSONL batch, metrics plan doc. **Phase 2** = Leap adapter (optional) + optional CI. **Phase 3** = real-data instrumentation (post-PoC).  
+**Status:** **Phase 1 + M1a/M1b complete** — local + optional Leap path (`solver_mode`), GitHub Actions for `dice-leap-poc`, tiered fixtures, strategy rollover, pytest. **Next:** optional L1/L2 persistence, Kotlin ingest, real-data instrumentation per metrics doc.  
 **Spec reference:** [dwave.md](../dwave.md) (reformatted spec + diagrams)  
 **Implementation:** [dice-leap-poc/README.md](../dice-leap-poc/README.md)  
-**Last plan iteration:** 2026-01-24 (pass 2) — Phase 2 broken into DoD + CI spec + Leap conventions + open decisions.
+**Last plan iteration:** 2026-01-24 (pass 3) — M1a/M1b **implemented** (CI workflow, `solver_mode`, Leap adapter, docs).
 
 ---
 
@@ -16,12 +16,14 @@ Use this as the baseline for future iterations:
 | Instance → QUBO → BQM | `dice_leap_poc/qubo.py`, `instance.py` |
 | Greedy baseline | `dice_leap_poc/baseline.py` |
 | Local SA | `dice_leap_poc/solve_local.py` (neal) |
+| Leap hybrid (optional) | `dice_leap_poc/solve_leap.py` — `pip install -e ".[leap]"`, `DWAVE_API_TOKEN` |
+| CI | `.github/workflows/dice-leap-poc.yml` |
 | Strategy (tier + rollover metrics) | `dice_leap_poc/strategy.py` — `tier: simple\|complex`; else `n>12` or `edges>8` |
 | Pipeline + `SolveRecord` | `dice_leap_poc/pipeline.py`, `record.py` |
 | Batch + tier aggregates | `dice_leap_poc/batch.py`, `scripts/batch_sample.py` |
 | Fixtures | `sample_data/toy_dw_md.json` (simple), `sample_data/complex_dw_md.json` (18 vars, QUBO win vs greedy) |
 | Schema | `dice-leap-poc/schemas/solve_record.schema.json` |
-| Tests | `tests/test_mvp.py`, `tests/test_acceptance.py` (14 tests) |
+| Tests | `tests/test_mvp.py`, `tests/test_acceptance.py`, `tests/test_leap.py` (Leap smoke optional) |
 | Real-world metrics **plan** (doc only) | [docs/DWAVE_REAL_WORLD_METRICS.md](../docs/DWAVE_REAL_WORLD_METRICS.md) |
 
 ---
@@ -48,23 +50,18 @@ Use this as the baseline for future iterations:
 - [x] **synthetic-iterate** — Acceptance margins in `test_acceptance.py` (`COMPLEX_MIN_MARGIN`, etc.).
 - [x] **real-world-metrics-plan** — `docs/DWAVE_REAL_WORLD_METRICS.md` (collection **after** PoC).
 
-### Next (Phase 2 — prioritized)
+### Done (Phase 2 — M1a / M1b)
 
-Work is split into **M1a (CI)** and **M1b (Leap)** so CI can land without cloud deps.
+**Completed:** 2026-01-24 — CI without Leap; optional `solver_mode=leap_hybrid` + `[leap]` + token-gated smoke test.
 
-| ID | Item | Depends on | Definition of done |
-|----|------|------------|-------------------|
-| **5c** | **ci-dice-leap-poc** | — | PR checks run `pytest` under `dice-leap-poc/` on default branch + PRs; **no** `dwave-hybrid` install; green on clean checkout. |
-| **6a** | **pipeline-solver-switch** | 5c (nice to parallelize with 6b) | `run_instance(..., solver_mode=...)` with default `local_classical`; code path for `leap_hybrid` either calls adapter or raises clear `NotImplementedError` until 6b lands (avoid half-wired API). |
-| **6b** | **leap-adapter** | 6a | `LeapHybridSampler` (or documented wrapper); creds from env; **pytest skip** when token missing; optional `[leap]` extra in `pyproject.toml`. |
-| **6c** | **milestone-doc-leap** | 6b | [dwave.md](../dwave.md) Phase 2 row + README “Leap” section: setup, env vars, **CI does not require Leap**. |
+| ID | Item | Notes |
+|----|------|--------|
+| **5c** | **ci-dice-leap-poc** | `.github/workflows/dice-leap-poc.yml`; path filters; `requirements.txt` + `pytest` only. |
+| **6a** | **pipeline-solver-switch** | `run_instance(..., solver_mode=..., leap_time_limit_s=...)`; default `local_classical`. |
+| **6b** | **leap-adapter** | `dice_leap_poc/solve_leap.py` → `LeapHybridSampler`; clear `ImportError` without `[leap]`. |
+| **6c** | **milestone-doc-leap** | [dwave.md](../dwave.md) + [dice-leap-poc/README.md](../dice-leap-poc/README.md) updated. |
 
-Concrete checklist (same as table):
-
-- [ ] **ci-dice-leap-poc** — See [§ CI workflow spec](#ci-workflow-spec-m1a) below.
-- [ ] **leap-adapter** — See [§ Leap adapter conventions](#leap-adapter-conventions-m1b) below.
-- [ ] **pipeline-solver-switch** — `run_instance(..., solver_mode=...)`; `SolveRecord.solver_mode` matches actual backend; document timeout / fallback (default: **fail fast** or **fallback to neal** — pick one in [open decisions](#open-decisions)).
-- [ ] **milestone-doc-leap** — Update [dwave.md](../dwave.md) “Implementation plan” table with Phase 2 done criteria.
+Details: [§ CI workflow spec](#ci-workflow-spec-m1a), [§ Leap adapter conventions](#leap-adapter-conventions-m1b). Leap failures **fail fast** (no auto-fallback to neal).
 
 ### Later / optional
 
@@ -95,8 +92,8 @@ Concrete checklist (same as table):
 | 4 | Heuristic baseline | **Done** |
 | 5 | Tiered synthetic dataset + batch | **Done** |
 | 5b | Acceptance (simple heuristic / complex QUBO + margin) | **Done** |
-| **5c** | **CI workflow for `dice-leap-poc`** | **Next** |
-| 6 | Leap adapter + creds-gated tests | Optional after 5c |
+| **5c** | **CI workflow for `dice-leap-poc`** | **Done** |
+| 6 | Leap adapter + creds-gated tests | **Done** (opt-in; CI local-only) |
 | 7 | Persist L2 (H2/API) | Optional |
 
 ---
@@ -171,9 +168,7 @@ Not required for Milestone 1 closure. Optional: surface `vs_baseline_delta` / so
 
 ## CI workflow spec (M1a)
 
-*Repo currently has no `.github/workflows/` for Python; add when implementing **5c**.*
-
-Suggested shape:
+**Implemented:** `.github/workflows/dice-leap-poc.yml` (path-filtered). Reference shape:
 
 - **Path:** `.github/workflows/dice-leap-poc.yml` (or a monorepo job in an existing workflow with `paths: [ 'dice-leap-poc/**', ... ]`).
 - **Trigger:** `pull_request` + `push` to default branch (optionally restrict paths to `dice-leap-poc/**` to save minutes).
@@ -200,7 +195,7 @@ Record outcomes here as you decide (keeps iteration honest):
 
 | Topic | Options | Notes |
 |-------|---------|--------|
-| Leap failure policy | Fail vs fallback to neal SA | Affects ops predictability vs always getting a sample. |
+| Leap failure policy | **Fail fast** (current) vs fallback to neal SA | **Implemented:** exceptions propagate; no auto-fallback. Revisit if ops need resilience. |
 | `solver_mode` default when strategy is QUBO | Always `local_classical` until env forces Leap | Simplest for CI; Leap opt-in via env flag. |
 | Python versions in CI | 3.10 only vs matrix | Match Kotlin/tooling policy for the org. |
 | M1 “complete” label | After 5c only vs after 6b | **Recommendation:** call **Milestone 1 done** after **5c**; track Leap as **M1b** or **Milestone 1.1**. |
@@ -278,5 +273,6 @@ flowchart LR
 
 - **2026-01-24 (pass 1):** Phase 1 local + tiered acceptance **closed**; checklist split into **Done / Next / Later**; added **5c CI**, Leap **pipeline switch**, optional **contract versioning** and **L1** mirror.
 - **2026-01-24 (pass 2):** **M1a / M1b** split; **CI workflow spec** (path, triggers, no Leap); **Leap conventions** (env, skip tests, markers); **open decisions** table; **SolveRecord Phase 2 deltas**; **maintenance/regression** notes; **DoD table** for Phase 2 items.
+- **2026-01-24 (pass 3):** Implemented **`.github/workflows/dice-leap-poc.yml`**, **`solve_leap.py`**, **`run_instance(..., solver_mode=, leap_time_limit_s=)`**, **`[leap]`** optional extra, **`tests/test_leap.py`**, README + **dwave.md** updates; milestone checklist closed for M1a/M1b.
 - Vertical slice preserved; **local-then-Leap** gate explicit.
 - Real-world metrics: **doc done**, **instrumentation** = post–Phase 2 decision.

@@ -56,6 +56,19 @@ def test_plan_strategy_below_rollover_no_tier():
     assert "below_rollover" in reason
 
 
+def test_explicit_solver_mode_local_classical():
+    inst = Instance.load_json(TOY)
+    rec = run_instance(
+        inst,
+        strategy_choice="qubo",
+        solver_mode="local_classical",
+        num_reads=800,
+        seed=1,
+    )
+    assert rec.solver_mode == "local_classical"
+    assert rec.strategy_choice == "qubo"
+
+
 def test_simple_tier_auto_heuristic_json():
     rec = run_json_file(TOY, num_reads=2000, seed=1)
     assert rec.strategy_choice == "heuristic_only"

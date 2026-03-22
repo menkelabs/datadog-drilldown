@@ -1,6 +1,6 @@
-# dice-leap-poc (Milestone 1, Phase 1)
+# dice-leap-poc (Milestone 1)
 
-Python prototype: structured decision instances → **QUBO** → **local classical** solve (dwave-neal simulated annealing). **No Leap** in Phase 1.
+Python prototype: structured decision instances → **QUBO** → **local classical** solve (dwave-neal simulated annealing), with an optional **Leap hybrid** path (`dwave-system`).
 
 **Spec / roadmap:** [dwave.md](../dwave.md) · [milestones/milestone-1.md](../milestones/milestone-1.md)
 
@@ -11,6 +11,19 @@ cd dice-leap-poc
 python3 -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
+```
+
+**Editable + dev tests:**
+
+```bash
+pip install -e ".[dev]"
+```
+
+**Optional Leap (Phase 2):**
+
+```bash
+pip install -e ".[dev,leap]"
+export DWAVE_API_TOKEN="..."   # or `dwave setup`
 ```
 
 ## Run toy instance (JSONL)
@@ -27,18 +40,38 @@ Appends one **SolveRecord** line to `runs/mvp.jsonl` (directory gitignored) and 
 python scripts/batch_sample.py
 ```
 
-Runs every `sample_data/*.json` with **automatic** strategy (`tier` + rollover metrics), appends to `runs/batch.jsonl`, and prints per-tier aggregates.
+Runs every `sample_data/*.json` with **automatic** strategy (`tier` + rollover metrics), appends to `runs/batch.jsonl`, and prints per-tier aggregates. Uses **`solver_mode=local_classical`** (default).
+
+## Solver backends
+
+| `solver_mode` | Backend | Default CI |
+|---------------|---------|------------|
+| `local_classical` | `neal.SimulatedAnnealingSampler` | Yes |
+| `leap_hybrid` | `dwave.system.LeapHybridSampler` | No (needs `[leap]` + `DWAVE_API_TOKEN`) |
+
+Python API:
+
+```python
+from dice_leap_poc.pipeline import run_instance
+from dice_leap_poc.instance import Instance
+
+inst = Instance.load_json("sample_data/toy_dw_md.json")
+rec = run_instance(
+    inst,
+    strategy_choice="qubo",
+    solver_mode="local_classical",
+    num_reads=4000,
+    seed=42,
+)
+# Leap: run_instance(..., solver_mode="leap_hybrid", leap_time_limit_s=5.0)
+```
+
+Heuristic-only runs always record `solver_mode=local_classical` (no sampler job).
 
 ## Strategy layer
 
 - JSON **`tier`**: `simple` → `heuristic_only`; `complex` → `qubo`.
 - If **`tier` is omitted**: rollover when `n_entities > 12` or `n_conflicts + n_dependencies > 8` (see [`dice_leap_poc/strategy.py`](dice_leap_poc/strategy.py), `RolloverConfig`).
-
-Editable install (optional):
-
-```bash
-pip install -e ".[dev]"
-```
 
 ## Tests
 
@@ -48,23 +81,30 @@ Imports resolve via [pytest.ini](pytest.ini) (`pythonpath = .`). From `dice-leap
 pytest tests/ -q
 ```
 
-## SolveRecord (Phase 1)
+- **Leap cloud smoke** (optional): `pytest tests/test_leap.py -m leap -q` — requires `[leap]` and `DWAVE_API_TOKEN`.
+- Default test run **skips** cloud Leap; includes a test that `leap_hybrid` without `dwave-system` raises `ImportError`.
+
+## CI
+
+Repository workflow [`.github/workflows/dice-leap-poc.yml`](../.github/workflows/dice-leap-poc.yml) installs `requirements.txt` only and runs `pytest` on changes under `dice-leap-poc/`.
+
+## SolveRecord
 
 Each run produces a JSON object (one line in JSONL) with:
 
 | Field | Meaning |
 |--------|---------|
 | `instance_id` | Input fixture id |
-| `solver_mode` | `local_classical` (Phase 1 only) |
+| `solver_mode` | `local_classical` or `leap_hybrid` |
 | `strategy_choice` | `qubo` or `heuristic_only` |
-| `strategy_reason` | Why that strategy was chosen (MVP uses `phase1_mvp_always_qubo`) |
+| `strategy_reason` | e.g. `fixture_tier_simple`, `rollover_metrics(...)`, `explicit_qubo` |
 | `n_vars` | Binary variables |
 | `objective` | Best QUBO energy found |
 | `selected_decisions` | Entity ids with value 1 |
-| `runtime_ms` | Local solve wall time |
+| `runtime_ms` | Solve wall time (0 for heuristic-only) |
 | `baseline_objective` | Greedy heuristic energy |
-| `vs_baseline_delta` | `baseline_objective - objective` (positive ⇒ QUBO better) |
-| `tier` | Optional fixture label (`simple` / `complex` later) |
+| `vs_baseline_delta` | `baseline_objective - objective` (positive ⇒ optimizer better) |
+| `tier` | Optional fixture label (`simple` / `complex`) |
 
 JSON Schema: [schemas/solve_record.schema.json](schemas/solve_record.schema.json)
 
@@ -76,8 +116,7 @@ See [sample_data/toy_dw_md.json](sample_data/toy_dw_md.json):
 - `conflicts`: `[ [a, b], ... ]` — penalty if both selected
 - `dependencies`: `[ [dependent, required], ... ]` — soft constraint via QUBO penalty
 
-## Next (per milestone)
+## Follow-on
 
-- Tiered **complex** fixtures + strategy rollover rules + acceptance tests (`vs_baseline_delta` margins).
-- Optional **Leap** (`leap_hybrid`) after local path is stable.
-- `docs/DWAVE_REAL_WORLD_METRICS.md` for pilot/production logging.
+- Optional **persist L2** (H2 / test-report-server) if JSONL is not enough.
+- [docs/DWAVE_REAL_WORLD_METRICS.md](../docs/DWAVE_REAL_WORLD_METRICS.md) for pilot/production logging.

@@ -1,15 +1,19 @@
-"""End-to-end: instance → BQM → local solve → SolveRecord."""
+"""End-to-end: instance → BQM → local or Leap solve → SolveRecord."""
 
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Literal
 
 from dice_leap_poc.baseline import greedy_min_energy
 from dice_leap_poc.instance import Instance
 from dice_leap_poc.qubo import assignment_to_selected, build_bqm
 from dice_leap_poc.record import SolveRecord
+from dice_leap_poc.solve_leap import solve_leap_hybrid
 from dice_leap_poc.solve_local import solve_local_sa
 from dice_leap_poc.strategy import RolloverConfig, plan_strategy
+
+SolverMode = Literal["local_classical", "leap_hybrid"]
 
 
 def run_instance(
@@ -18,8 +22,10 @@ def run_instance(
     strategy_choice: str | None = None,
     strategy_reason: str | None = None,
     rollover: RolloverConfig | None = None,
+    solver_mode: SolverMode = "local_classical",
     num_reads: int = 2000,
     seed: int | None = 42,
+    leap_time_limit_s: float | None = None,
 ) -> SolveRecord:
     if strategy_choice is None:
         strategy_choice, auto_reason = plan_strategy(inst, cfg=rollover)
@@ -47,12 +53,20 @@ def run_instance(
             tier=inst.tier,
         )
 
-    sample, e_best, rt = solve_local_sa(bqm, num_reads=num_reads, seed=seed)
+    if solver_mode == "leap_hybrid":
+        sample, e_best, rt = solve_leap_hybrid(bqm, time_limit_s=leap_time_limit_s)
+        record_mode: SolverMode = "leap_hybrid"
+    elif solver_mode == "local_classical":
+        sample, e_best, rt = solve_local_sa(bqm, num_reads=num_reads, seed=seed)
+        record_mode = "local_classical"
+    else:
+        raise ValueError(f"Unknown solver_mode: {solver_mode!r}")
+
     sel = assignment_to_selected(bqm, sample)
     delta = e_heur - e_best
     return SolveRecord(
         instance_id=inst.instance_id,
-        solver_mode="local_classical",
+        solver_mode=record_mode,
         strategy_choice="qubo",
         strategy_reason=strategy_reason,
         n_vars=len(bqm.variables),
