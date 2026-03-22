@@ -33,7 +33,10 @@ datadog-drilldown-video-docs/
 
 ## GitHub Pages (CI publish on `main`)
 
-When you push changes under **`datadog-drilldown-video-docs/`**, workflow **[`.github/workflows/video-docs-pages.yml`](../../../.github/workflows/video-docs-pages.yml)** will:
+**Live site (after a green deploy):** **[https://menkelabs.github.io/datadog-drilldown/](https://menkelabs.github.io/datadog-drilldown/)**  
+**Workflow:** [video-docs-pages.yml](https://github.com/menkelabs/datadog-drilldown/actions/workflows/video-docs-pages.yml)
+
+When you push changes under **`datadog-drilldown-video-docs/`**, **[`.github/workflows/video-docs-pages.yml`](../../../.github/workflows/video-docs-pages.yml)** will:
 
 1. Install **ffmpeg** and Python deps  
 2. Run **OpenAI TTS** (`generate-narration.py`) — requires repository secret **`OPENAI_API_KEY`**  
