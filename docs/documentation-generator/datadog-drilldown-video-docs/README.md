@@ -45,9 +45,9 @@ When you push changes under **`datadog-drilldown-video-docs/`**, **[`.github/wor
 
 **One-time repo setup**
 
-1. **Settings → Secrets and variables → Actions** → create secret **`OPENAI_API_KEY`**.  
-2. **Settings → Pages** → **Build and deployment** → **Source: GitHub Actions**.  
-3. After the first successful run, open the workflow’s **deploy** job for the public **Page URL** (e.g. `https://<org>.github.io/<repo>/`).
+1. **Settings → Pages** → **Build and deployment** → **Source: GitHub Actions**.  
+2. **Optional — real voice on Pages:** **Settings → Secrets and variables → Actions** → **`OPENAI_API_KEY`**. If it’s missing, CI still succeeds: **silent MP3s** are generated with length estimated from each narration script (text visuals + silence).  
+3. After a successful run, open the **deploy** job for the public **Page URL** (e.g. `https://<org>.github.io/<repo>/`).
 
 > **Note:** A GitHub repository can only host **one** Pages site. If you already publish another site from this repo, either combine assets into a single workflow/site or use a dedicated repo for videos.
 

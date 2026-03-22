@@ -6,7 +6,7 @@ AI-assisted **root cause analysis** for production incidents using **Embabel** a
 
 | What | Where |
 |------|--------|
-| **Demo videos (GitHub Pages)** | **[Live site](https://menkelabs.github.io/datadog-drilldown/)** · [video-docs-pages workflow](https://github.com/menkelabs/datadog-drilldown/actions/workflows/video-docs-pages.yml) (needs `OPENAI_API_KEY` secret + Pages → GitHub Actions) |
+| **Demo videos (GitHub Pages)** | **[Live site](https://menkelabs.github.io/datadog-drilldown/)** · [video-docs-pages workflow](https://github.com/menkelabs/datadog-drilldown/actions/workflows/video-docs-pages.yml) (enable **Pages → GitHub Actions**; **`OPENAI_API_KEY`** optional — without it, CI uses silent stub audio) |
 | **Video bundle** (TTS, text visuals, compose) | [`docs/documentation-generator/datadog-drilldown-video-docs/`](docs/documentation-generator/datadog-drilldown-video-docs/) |
 | **Narrative script** (architecture + D-Wave) | [`docs/VIDEO_NARRATIVE_ARCHITECTURE_AND_DWAVE.md`](docs/VIDEO_NARRATIVE_ARCHITECTURE_AND_DWAVE.md) |
 | **D-Wave Leap** (token, venv, verify) | [`docs/DWAVE_LEAP_SETUP.md`](docs/DWAVE_LEAP_SETUP.md) |

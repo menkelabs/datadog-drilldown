@@ -1,8 +1,9 @@
-# Build narrated MP4s (OpenAI TTS + ffmpeg text visuals) and deploy static site to GitHub Pages.
+# Build MP4s (OpenAI TTS when secret is set, else silent stub audio) + ffmpeg text visuals → GitHub Pages.
 #
 # Setup (once per repo):
-#   1. Settings → Secrets and variables → Actions → New repository secret: OPENAI_API_KEY
-#   2. Settings → Pages → Build and deployment → Source: GitHub Actions
+#   1. Settings → Pages → Build and deployment → Source: GitHub Actions
+#   2. Optional: Settings → Secrets → Actions → OPENAI_API_KEY for real narration on Pages.
+#      Without it, CI still passes: stub MP3s match ~script length (silent audio).
 #
 name: video-docs-pages
 
@@ -45,16 +46,27 @@ jobs:
       - name: Install Python dependencies
         run: pip install -r docs/documentation-generator/datadog-drilldown-video-docs/requirements.txt
 
-      - name: Generate TTS audio
+      - name: Generate TTS audio (OpenAI)
+        if: ${{ secrets.OPENAI_API_KEY != '' }}
         working-directory: docs/documentation-generator/datadog-drilldown-video-docs
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: python generate-narration.py
+
+      - name: Stub narration audio (no OPENAI_API_KEY)
+        if: ${{ secrets.OPENAI_API_KEY == '' }}
+        working-directory: docs/documentation-generator/datadog-drilldown-video-docs
         run: |
-          if [ -z "${OPENAI_API_KEY:-}" ]; then
-            echo "::error::Repository secret OPENAI_API_KEY is not set. Add it under Settings → Secrets and variables → Actions."
-            exit 1
-          fi
-          python generate-narration.py
+          echo "::warning::OPENAI_API_KEY not set — publishing silent audio with duration estimated from narration word count. Add the repo secret for real TTS."
+          mkdir -p audio
+          shopt -s nullglob
+          for f in narration/[0-9][0-9]-*.md; do
+            stem=$(basename "$f" .md)
+            words=$(tr -cs '[:alnum:]_' ' ' < "$f" | wc -w)
+            secs=$(awk -v w="$words" 'BEGIN { s=int(w/2.2)+10; if(s<15)s=15; if(s>300)s=300; print s }')
+            ffmpeg -y -f lavfi -i anullsrc=r=44100:cl=stereo -t "$secs" -c:a libmp3lame -q:a 5 "audio/${stem}.mp3"
+          done
+          ls -la audio/
 
       - name: Compose segment videos
         working-directory: docs/documentation-generator/datadog-drilldown-video-docs
