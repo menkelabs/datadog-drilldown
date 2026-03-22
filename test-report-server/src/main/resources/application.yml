@@ -18,6 +18,10 @@ run-tests:
   project-root: ${PROJECT_ROOT:..}
   script-path: ${EMBABEL_DICE_RCA_SCRIPT:}
 
+# dice-leap-poc JSONL mirror (L0); optional L1: embabel-dice-rca/test-reports/solver-runs
+solver-runs:
+  directory: ${SOLVER_RUNS_DIR:../dice-leap-poc/runs}
+
 logging:
   level:
     root: WARN

@@ -1,23 +1,177 @@
 {
   "instance_id": "rollover_n13",
-  "description": "No tier: 13 candidates (>12) triggers metrics rollover to qubo — simulates dwave.md candidate_count trigger.",
+  "encoding_version": "1",
+  "description": "No tier: n=13 (>12) triggers metrics rollover; conflicts tuned so QUBO/SA beats greedy (simulates D-Wave justification).",
   "entities": [
-    { "id": "C0", "cost": 1.0, "signal": 2.0 },
-    { "id": "C1", "cost": 1.05, "signal": 1.95 },
-    { "id": "C2", "cost": 1.1, "signal": 2.05 },
-    { "id": "C3", "cost": 0.95, "signal": 2.1 },
-    { "id": "C4", "cost": 1.15, "signal": 1.9 },
-    { "id": "C5", "cost": 1.0, "signal": 2.0 },
-    { "id": "C6", "cost": 1.08, "signal": 1.98 },
-    { "id": "C7", "cost": 1.12, "signal": 2.02 },
-    { "id": "C8", "cost": 0.98, "signal": 2.08 },
-    { "id": "C9", "cost": 1.06, "signal": 1.96 },
-    { "id": "C10", "cost": 1.02, "signal": 2.04 },
-    { "id": "C11", "cost": 1.09, "signal": 1.99 },
-    { "id": "C12", "cost": 1.03, "signal": 2.01 }
+    {
+      "id": "C0",
+      "cost": 4.55,
+      "signal": 4.7
+    },
+    {
+      "id": "C1",
+      "cost": 3.02,
+      "signal": 3.41
+    },
+    {
+      "id": "C2",
+      "cost": 3.05,
+      "signal": 2.74
+    },
+    {
+      "id": "C3",
+      "cost": 1.97,
+      "signal": 3.1
+    },
+    {
+      "id": "C4",
+      "cost": 3.87,
+      "signal": 2.0
+    },
+    {
+      "id": "C5",
+      "cost": 3.61,
+      "signal": 0.9
+    },
+    {
+      "id": "C6",
+      "cost": 0.95,
+      "signal": 4.45
+    },
+    {
+      "id": "C7",
+      "cost": 0.74,
+      "signal": 2.7
+    },
+    {
+      "id": "C8",
+      "cost": 1.38,
+      "signal": 1.03
+    },
+    {
+      "id": "C9",
+      "cost": 0.54,
+      "signal": 2.12
+    },
+    {
+      "id": "C10",
+      "cost": 0.71,
+      "signal": 4.73
+    },
+    {
+      "id": "C11",
+      "cost": 2.98,
+      "signal": 2.27
+    },
+    {
+      "id": "C12",
+      "cost": 1.87,
+      "signal": 1.64
+    }
   ],
-  "conflicts": [],
+  "conflicts": [
+    [
+      "C0",
+      "C1"
+    ],
+    [
+      "C0",
+      "C3"
+    ],
+    [
+      "C0",
+      "C4"
+    ],
+    [
+      "C1",
+      "C11"
+    ],
+    [
+      "C1",
+      "C12"
+    ],
+    [
+      "C1",
+      "C2"
+    ],
+    [
+      "C1",
+      "C5"
+    ],
+    [
+      "C10",
+      "C11"
+    ],
+    [
+      "C10",
+      "C3"
+    ],
+    [
+      "C10",
+      "C6"
+    ],
+    [
+      "C11",
+      "C2"
+    ],
+    [
+      "C11",
+      "C3"
+    ],
+    [
+      "C11",
+      "C5"
+    ],
+    [
+      "C11",
+      "C6"
+    ],
+    [
+      "C11",
+      "C8"
+    ],
+    [
+      "C11",
+      "C9"
+    ],
+    [
+      "C12",
+      "C5"
+    ],
+    [
+      "C12",
+      "C6"
+    ],
+    [
+      "C2",
+      "C7"
+    ],
+    [
+      "C3",
+      "C4"
+    ],
+    [
+      "C3",
+      "C6"
+    ],
+    [
+      "C5",
+      "C7"
+    ],
+    [
+      "C6",
+      "C7"
+    ],
+    [
+      "C6",
+      "C8"
+    ],
+    [
+      "C6",
+      "C9"
+    ]
+  ],
   "dependencies": [],
-  "conflict_penalty": 5.0,
+  "conflict_penalty": 8.0,
   "dependency_penalty": 10.0
 }

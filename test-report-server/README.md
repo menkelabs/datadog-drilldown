@@ -31,10 +31,17 @@ Open **http://localhost:8081** for the UI. The UI lets you:
 | `TEST_REPORT_DB_URL` | `jdbc:h2:file:../embabel-dice-rca/test-reports/test-history;...` | H2 URL (same DB as tests). |
 | `PROJECT_ROOT` | `..` | Project root (relative to server CWD). Used to find `embabel-dice-rca` and the run script. |
 | `run-tests.script-path` | (empty → `embabel-dice-rca/run-tests-with-server.sh`) | Override path to the script. |
+| `SOLVER_RUNS_DIR` / `solver-runs.directory` | `../dice-leap-poc/runs` | Directory of `*.jsonl` from [dice-leap-poc](../dice-leap-poc/README.md) (`SolveRecord` lines). |
 
 When the UI runs tests, the server sets `TEST_RUN_ID` and `TEST_REPORT_DB_PATH` for the script process so results are tagged and stored in the shared H2 DB.
 
 ## API
+
+### DICE / QUBO solver runs (JSONL)
+
+- `GET /api/solver-runs?limit=500` — parse recent non-blank lines from all `*.jsonl` in `solver-runs.directory` (tail up to `limit`). No DB persistence (read-through L0/L1 files).
+
+### Test runs (H2)
 
 - `GET /api/runs/summaries` — run summaries
 - `GET /api/runs?runId=&scenarioId=&status=&limit=` — list runs (optional filters)

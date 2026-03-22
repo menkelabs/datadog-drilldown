@@ -25,7 +25,9 @@ Use this as the baseline for future iterations:
 | Encoding contract | `SolveRecord.encoding_version` (default `1`), optional on instance JSON |
 | Fixtures | `sample_data/` — see [sample_data/README.md](../dice-leap-poc/sample_data/README.md): tiered simple/complex + **rollover boundaries** (`below_rollover_n12_e8`, `rollover_n13`, `rollover_edges9`) to simulate when QUBO/D-Wave path is justified |
 | Schema | `dice-leap-poc/schemas/solve_record.schema.json` |
-| Tests | `tests/test_mvp.py`, `tests/test_acceptance.py`, `tests/test_leap.py` (Leap smoke optional) |
+| Tests | `tests/test_mvp.py`, `tests/test_acceptance.py`, `tests/test_leap.py` (Leap smoke optional); `rollover_n13` asserts QUBO superiority on **metrics** path |
+| Kotlin ingest | `embabel-dice-rca/.../solver/SolveRecord*.kt` |
+| UI / API (JSONL) | `test-report-server` `GET /api/solver-runs` |
 | Real-world metrics **plan** (doc only) | [docs/DWAVE_REAL_WORLD_METRICS.md](../docs/DWAVE_REAL_WORLD_METRICS.md) |
 
 ---
@@ -67,10 +69,10 @@ Details: [§ CI workflow spec](#ci-workflow-spec-m1a), [§ Leap adapter conventi
 
 ### Later / optional
 
-- [ ] **persist-l2** — `solver_runs` H2 + test-report-server API if JSONL insufficient.
+- [ ] **persist-l2** — Optional H2 table `solver_runs` for long retention; **lite** read API exists: `GET /api/solver-runs` on [test-report-server](../test-report-server/README.md) over JSONL directory.
 - [x] **persist-l1** — Script `dice-leap-poc/scripts/mirror_jsonl_l1.py` copies `runs/*.jsonl` → `embabel-dice-rca/test-reports/solver-runs/` (dir gitignored; manual or CI artifact).
 - [x] **contract-evolution** — `encoding_version` on `SolveRecord` + optional instance JSON field; default `1` in `record.py`; schema updated.
-- [ ] **kotlin-ingest** — Thin client or batch job to read JSONL / HTTP; **defer** until contract stable.
+- [x] **kotlin-ingest** — `com.example.rca.dice.solver.SolveRecord` + `SolveRecordJsonlReader` in [embabel-dice-rca](../embabel-dice-rca/) (Jackson, snake_case); unit test `SolveRecordJsonlReaderTest`.
 
 ---
 

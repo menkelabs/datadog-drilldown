@@ -1,0 +1,29 @@
+name: test-report-server
+
+on:
+  pull_request:
+    paths:
+      - "test-report-server/**"
+      - ".github/workflows/test-report-server.yml"
+  push:
+    branches: [main]
+    paths:
+      - "test-report-server/**"
+      - ".github/workflows/test-report-server.yml"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: "21"
+          distribution: temurin
+          cache: maven
+
+      - name: Maven test
+        run: mvn -q test
+        working-directory: test-report-server

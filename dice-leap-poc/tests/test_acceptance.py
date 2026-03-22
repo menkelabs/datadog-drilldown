@@ -20,6 +20,7 @@ ROLLOVER_EDGES9 = ROOT / "sample_data" / "rollover_edges9.json"
 
 # Tuned with synthetic complex fixture (greedy vs brute margin ~2.03); SA uses 10k reads.
 COMPLEX_MIN_MARGIN = 1.5
+ROLLOVER_N13_MIN_MARGIN = 1.5
 SIMPLE_MAX_DELTA = 1e-9
 
 
@@ -133,3 +134,13 @@ def test_rollover_dataset_metrics_boundaries():
     assert c_e == "qubo"
     assert "rollover_metrics" in r_e
     assert "edges=9" in r_e
+
+
+def test_rollover_n13_qubo_superiority_metrics_path():
+    """Metrics rollover (n>12): SA/QUBO path measurably beats greedy — same bar as tier=complex."""
+    inst = Instance.load_json(ROLLOVER_N13)
+    rec = run_instance(inst, num_reads=12000, seed=42)
+    assert rec.strategy_choice == "qubo"
+    assert "rollover_metrics" in rec.strategy_reason
+    assert rec.encoding_version == "1"
+    assert rec.vs_baseline_delta >= ROLLOVER_N13_MIN_MARGIN

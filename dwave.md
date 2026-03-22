@@ -202,7 +202,9 @@ Track at least:
 
 **Repo layout:** `dice-leap-poc/` — strategy, compiler, solvers (`solve_local`, `solve_leap`), pipeline, tests, **`sample_data/`** with fixtures that **simulate rollover** (tier simple/complex + metric boundaries at `n>12` / `edges>8`). *(See [dice-leap-poc/sample_data/README.md](dice-leap-poc/sample_data/README.md), [dice-leap-poc/README.md](dice-leap-poc/README.md), [milestones/milestone-1.md](milestones/milestone-1.md).)*
 
-**CI:** GitHub Actions workflow `.github/workflows/dice-leap-poc.yml` runs `pytest` with **no** Leap credentials and **no** `dwave-system` install.
+**CI:** GitHub Actions workflow `.github/workflows/dice-leap-poc.yml` runs `pytest` with **no** Leap credentials and **no** `dwave-system` install. **test-report-server** has `.github/workflows/test-report-server.yml` for Maven tests.
+
+**Ingest:** Kotlin `SolveRecord` + JSONL reader under `embabel-dice-rca/.../dice/solver/`; optional `GET /api/solver-runs` on test-report-server over `dice-leap-poc/runs/*.jsonl`.
 
 ---
 
