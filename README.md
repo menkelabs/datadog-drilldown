@@ -1,74 +1,79 @@
 # Datadog RCA Assistant (Embabel + DICE)
 
-AI-powered Root Cause Analysis (RCA) system for production incidents, leveraging **Embabel** AI agents and **DICE** (Domain-Integrated Context Engineering) for intelligent memory and reasoning.
+AI-powered **Root Cause Analysis (RCA)** for production incidents using **Embabel** agents and **DICE** (Domain-Integrated Context Engineering) for memory and reasoning.
 
-## 🚧 Test Report Server & AI Parameter Tuning UI (Work in Progress) 🚧
+---
 
-![Test Report Server UI](docs/img/refactor-fe.png)
+## D-Wave & QUBO (highlight)
 
-The test-report-server provides a web-based interface for running tests, viewing results, and tuning AI parameters to improve detection success across scenarios. See the [Test Report Server & AI Parameter Tuning](#test-report-server--ai-parameter-tuning) section below for details.
+Decision problems can be compiled to **QUBO** and solved **locally** (simulated annealing) or, optionally, on **D-Wave Leap** cloud hybrid samplers. This stack is optional for core RCA; it enriches ranking when enabled.
+
+| What | Where |
+|------|--------|
+| **Leap API token — obtain & configure** | **[docs/DWAVE_LEAP_SETUP.md](docs/DWAVE_LEAP_SETUP.md)** — account, `DWAVE_API_TOKEN`, `pip install ".[leap]"`, verify with pytest or `solve_json.py --solver-mode leap_hybrid` |
+| **Python PoC** (instances → QUBO → solve) | **[dice-leap-poc/](dice-leap-poc/)** · spec **[dwave.md](dwave.md)** · milestones **[milestones/milestone-1.md](milestones/milestone-1.md)** |
+| **JVM bridge** (RCA → Python subprocess) | Flagged in **`embabel-dice-rca`** — **[docs/adr/0002-dice-leap-subprocess-bridge.md](docs/adr/0002-dice-leap-subprocess-bridge.md)** · **[embabel-dice-rca/README.md](embabel-dice-rca/README.md)** (QUBO section) |
+| **One-shot smoke** (venv + toy solve + JVM IT) | **`./scripts/qubo-e2e-smoke.sh`** · **[scripts/README.md](scripts/README.md)** |
+| **Telemetry** | **[docs/QUBO_METRICS_V1.md](docs/QUBO_METRICS_V1.md)** · pilot plan **[docs/DWAVE_REAL_WORLD_METRICS.md](docs/DWAVE_REAL_WORLD_METRICS.md)** |
+| **Milestone status** | **[milestones/milestone-2.md](milestones/milestone-2.md)** (M2a–M2d) |
+
+**Default path:** no Leap account required — local classical solver in `dice-leap-poc`. **Leap** is opt-in (free/trial per D-Wave).
+
+---
+
+## Test Report Server (WIP)
+
+Web UI for running tests, viewing results, and tuning AI parameters. Screenshot: `docs/img/refactor-fe.png`.
+
+Details: **[test-report-server/README.md](test-report-server/README.md)** · Playwright E2E: `test-report-server/e2e/` (`npm run e2e:ci` from **`test-report-server/`**).
+
+---
 
 ## Architecture
 
-The system consists of two primary Kotlin/Spring Boot modules:
+Two primary Kotlin / Spring Boot modules:
 
-1.  **`embabel-dice-rca`**: The analysis engine and AI agent. It collects telemetry from Datadog (logs, metrics, spans), performs pattern analysis, and identifies root cause candidates.
-2.  **`dice-server`**: The intelligent memory and reasoning engine. It decomposes incident data into atomic facts (propositions) and provides a reasoning API to answer complex questions about incidents.
+1. **`embabel-dice-rca`** — Analysis engine and Embabel agent: Datadog telemetry, pattern analysis, root-cause candidates, optional QUBO enrichment, DICE ingest.
+2. **`dice-server`** — Proposition extraction and reasoning API over incident memory.
 
-## Modules
+Additional: **`test-report-server`** — REST + static UI for test runs, solver JSONL, and analysis.
 
-### 1. RCA Agent (`embabel-dice-rca`)
-- **Telemetry Collection**: Interfaces with Datadog REST API.
-- **Analysis Engine**: Clusters logs, identifies metric anomalies, and correlates APM traces.
-- **AI Agent**: Uses Embabel framework to orchestrate the investigation workflow.
-- **DICE Bridge**: Pushes investigation results to the DICE server for persistent memory.
+---
 
-### 2. DICE Server (`dice-server`)
-- **Ingestion API**: Receives raw incident data and reports.
-- **Proposition Extraction**: Uses LLMs to extract atomic, factual propositions from text.
-- **Reasoning Engine**: Provides semantic query capabilities over stored incident memory.
-- **Persistence**: Managed factual memory of all incidents.
+## Modules (summary)
 
-### 3. Test Report Server (`test-report-server`)
-- **Test Execution UI**: Web interface for running integration tests and viewing results.
-- **Persistent Test Storage**: H2 database stores all test runs with AI parameters, coverage metrics, and outcomes.
-- **AI Parameter Tuning**: Track which parameter combinations (model, temperature, keywords) improve detection success across scenarios.
-- **Analysis Dashboard**: View test summaries, filter by scenario/status, and analyze trends over time.
+| Module | Role |
+|--------|------|
+| **embabel-dice-rca** | Datadog REST, log/metric/trace analysis, Embabel workflow, DICE bridge, optional **mock Datadog** profiles for local dev |
+| **dice-server** | Ingestion, LLM proposition extraction, semantic query |
+| **test-report-server** | H2-backed run history, UI, optional test triggers, DICE/QUBO solver run views |
+| **dice-leap-poc** | Python: instance JSON → QUBO → `local_classical` or **`leap_hybrid`** |
 
-## Roadmap: QUBO / D-Wave
-
-**Milestone 1 (done):** PoC in **[dice-leap-poc/](dice-leap-poc/)** — QUBO compile, local SA, optional Leap, tiered/rollover fixtures, pytest, `SolveRecord` contract, JSONL + H2 lite + test-report UI, Kotlin JSONL types. See **[milestones/milestone-1.md](milestones/milestone-1.md)** and **[dwave.md](dwave.md)**.
-
-**Milestone 2:** First-pass **M2a–M2d** in **[milestones/milestone-2.md](milestones/milestone-2.md)** — RCA→Python QUBO bridge (flagged), **telemetry** ([QUBO_METRICS_V1.md](docs/QUBO_METRICS_V1.md)), **DAG/resilience** doc + retries/fallback, **Maven reactor** + **`java-modules.yml`**, optional **Leap** workflow.
-
-**Docs:** **[docs/DWAVE_LEAP_SETUP.md](docs/DWAVE_LEAP_SETUP.md)** (Leap API token & venv) · **[docs/DWAVE_REAL_WORLD_METRICS.md](docs/DWAVE_REAL_WORLD_METRICS.md)** (broader pilot plan) · **[docs/QUBO_METRICS_V1.md](docs/QUBO_METRICS_V1.md)** (v1 JVM emission).
+---
 
 ## Setup
 
 ### Prerequisites
-- Java 21+
-- Maven 3.8+
-- OpenAI or Anthropic API Key
-- Datadog API & App Keys
 
-### Java reactor (all modules)
+- Java **21+**, Maven **3.8+**
+- LLM key (OpenAI / Anthropic / Ollama) for agents
+- Datadog keys **or** Spring profile **`mock-datadog`** / **`mock-datadog-scenarios`** (see **[embabel-dice-rca/README.md](embabel-dice-rca/README.md)**)
 
-From the **repository root**, run tests for `embabel-dice-rca`, `dice-server`, and `test-report-server`:
+### Build & test (reactor)
+
+From **repo root**:
 
 ```bash
 mvn test
 ```
 
-Uses root [`pom.xml`](pom.xml) as aggregator. You can still build a single module with `cd embabel-dice-rca && mvn test`, etc.
+Aggregator: **[pom.xml](pom.xml)**. Single module: `cd embabel-dice-rca && mvn test`, etc.
 
-**Branch protection:** see **[docs/CI_BRANCH_PROTECTION.md](docs/CI_BRANCH_PROTECTION.md)** for which GitHub Actions to mark **required** vs optional (e.g. Leap).
+- **Branch protection / CI:** **[docs/CI_BRANCH_PROTECTION.md](docs/CI_BRANCH_PROTECTION.md)**
+- **QUBO smoke:** `./scripts/qubo-e2e-smoke.sh` (optional `--verbose`)
 
-**QUBO E2E smoke (local):** **[scripts/qubo-e2e-smoke.sh](scripts/qubo-e2e-smoke.sh)** — venv, toy solve, JVM subprocess test; see **[scripts/README.md](scripts/README.md)**.
+### Environment (typical)
 
-### Configuration
-
-#### Environment Variables
-Set environment variables:
 ```bash
 export OPENAI_API_KEY="sk-..."
 export DD_API_KEY="..."
@@ -76,100 +81,39 @@ export DD_APP_KEY="..."
 export DD_SITE="datadoghq.com"
 ```
 
-#### IDE Configuration (VS Code)
+### Run services
 
-The project is configured to use **Java 21** and **Kotlin JVM target 21**. If you see IDE errors about JVM target mismatches:
+```bash
+cd dice-server && mvn spring-boot:run
+cd embabel-dice-rca && mvn spring-boot:run
+```
 
-**VS Code Settings** (already configured in `.vscode/settings.json`):
-- `kotlin.compiler.jvm.target`: Set to `"21"` to match Maven configuration
-- `kotlin.languageServer.enabled`: Enabled for Kotlin language support
+### IDE (VS Code)
 
-**If you see "Cannot inline bytecode built with JVM target 21 into bytecode that is being built with JVM target 1.8"**:
-1. Reload VS Code window: `Ctrl+Shift+P` → "Reload Window"
-2. Ensure Java 21 is selected as the project SDK
-3. The Maven build uses JVM target 21 correctly - this is typically an IDE cache issue
+Java/Kotlin **21** — see **[.vscode/settings.json](.vscode/settings.json)**. If the IDE shows JVM target mismatches, reload the window and point the project SDK at Java 21; Maven `pom.xml` files use `jvmTarget=21`.
 
-**Maven Configuration**:
-- Both modules (`dice-server` and `embabel-dice-rca`) have `jvmTarget=21` configured in their `pom.xml`
-- Kotlin Maven plugin version is explicitly set to match Kotlin version
-
-### Running the Services
-
-1. **Start the DICE Server**:
-   ```bash
-   cd dice-server && mvn spring-boot:run
-   ```
-
-2. **Run the RCA Agent**:
-   ```bash
-   cd embabel-dice-rca && mvn spring-boot:run
-   ```
+---
 
 ## Testing
 
-### Integration Testing
-The project includes a comprehensive integration test harness that simulates a Datadog incident and verifies the full flow from analysis to DICE reasoning:
+| Kind | Command / pointer |
+|------|-------------------|
+| Full Java reactor | `mvn test` (root) |
+| Integration (DICE + env) | `cd embabel-dice-rca && mvn test -Dtest=SystemIntegrationTest` (needs **`DICE_SERVER_URL`**, keys, etc.) |
+| Test Report UI E2E | `cd test-report-server && npm run e2e:ci && npm run e2e:browsers && npm run e2e:test` |
+| QUBO Python + JVM IT | `./scripts/qubo-e2e-smoke.sh` |
 
-```bash
-cd embabel-dice-rca && mvn test -Dtest=SystemIntegrationTest
-```
+Tuning workflow and H2 details: **[test-report-server/README.md](test-report-server/README.md)** · SQL / analysis: **[embabel-dice-rca/docs/TEST_REPORT_ANALYSIS.md](embabel-dice-rca/docs/TEST_REPORT_ANALYSIS.md)**.
 
-### Unit Testing
-Each module contains unit tests for its core logic:
-```bash
-cd dice-server && mvn test
-cd embabel-dice-rca && mvn test
-```
-
-### Test Report Server & AI Parameter Tuning
-
-The test harness provides a web-based UI for iterative tuning of AI parameters to improve detection success across scenarios. Given the complexity of minimal configuration scenarios, the system persists all test results to a local H2 database for analysis.
-
-**Start the Test Report Server:**
-```bash
-cd test-report-server
-mvn spring-boot:run
-# Open http://localhost:8081
-```
-
-**Key Features for AI Tuning:**
-
-1. **Run Tests from UI**: Execute specific test patterns (e.g., `DiceRcaIntegration`, `AllScenarios`) directly from the web interface with optional verbose logging.
-
-2. **Persistent Test Storage**: All test runs are saved to H2 database (`embabel-dice-rca/test-reports/test-history`) with:
-   - AI parameters (model, temperature)
-   - Test outcomes (passed/failed, keyword coverage, component/cause identification)
-   - Performance metrics (duration, API calls)
-   - Full test execution reports (JSON)
-
-3. **Coverage Metrics**: Each test result shows keyword coverage percentage, allowing you to:
-   - Identify which scenarios need keyword adjustments
-   - Track improvements after parameter changes
-   - Compare detection success across different AI model/temperature combinations
-
-4. **Historical Analysis**: View recent runs, filter by scenario or status, and analyze trends:
-   - Which parameter combinations yield higher pass rates
-   - How keyword coverage correlates with test success
-   - Performance impact of different configurations
-
-5. **Real-time Logs**: The UI displays test execution logs including:
-   - LLM model used (e.g., `gpt-4.1-nano`)
-   - Token usage (prompt/completion tokens)
-   - AI reasoning answers
-   - System lifecycle events
-
-**Workflow for Tuning:**
-1. Run tests from the UI with current parameters
-2. Review coverage metrics and pass/fail rates in the dashboard
-3. Adjust AI parameters (temperature, model, expected keywords) based on results
-4. Re-run tests and compare outcomes in the "Recent runs" table
-5. Use the H2 database for deeper analysis (see `embabel-dice-rca/docs/TEST_REPORT_ANALYSIS.md` for SQL queries)
-
-The persistent storage enables data-driven tuning: identify which parameter adjustments improve detection success for specific scenarios, track improvements over time, and optimize the AI configuration for production use.
-
-See [test-report-server/README.md](test-report-server/README.md) for detailed API and configuration options.
+---
 
 ## Documentation
-- [Architecture Diagrams](embabel-dice-rca/docs/architecture/README.md)
-- [PlantUML Setup Guide](docs/puml-setup.md)
-- [Milestone 1 — D-Wave / QUBO PoC](milestones/milestone-1.md) · [DICE + D-Wave concept spec](dwave.md)
+
+| Doc | Topic |
+|-----|--------|
+| **[docs/DWAVE_LEAP_SETUP.md](docs/DWAVE_LEAP_SETUP.md)** | D-Wave Leap token & venv |
+| **[dwave.md](dwave.md)** | DICE + QUBO + Leap architecture |
+| **[docs/adr/0002-dice-leap-subprocess-bridge.md](docs/adr/0002-dice-leap-subprocess-bridge.md)** | JVM ↔ Python bridge |
+| **[embabel-dice-rca/docs/architecture/README.md](embabel-dice-rca/docs/architecture/README.md)** | Diagrams |
+| **[docs/puml-setup.md](docs/puml-setup.md)** | PlantUML |
+| **[milestones/milestone-1.md](milestones/milestone-1.md)** · **[milestone-2.md](milestones/milestone-2.md)** | Roadmap |
