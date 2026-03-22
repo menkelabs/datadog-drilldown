@@ -1,0 +1,45 @@
+# Verify MkDocs site builds (Milestone 3 — documentation-generator)
+name: docs-site
+
+on:
+  pull_request:
+    paths:
+      - "docs/documentation-generator/**"
+      - "docs/*.md"
+      - "docs/adr/**"
+      - "milestones/**"
+      - "README.md"
+      - "dwave.md"
+      - ".github/workflows/docs-site.yml"
+  push:
+    branches: [main]
+    paths:
+      - "docs/documentation-generator/**"
+      - "docs/*.md"
+      - "docs/adr/**"
+      - "milestones/**"
+      - "README.md"
+      - "dwave.md"
+      - ".github/workflows/docs-site.yml"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: docs/documentation-generator
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: docs/documentation-generator/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: MkDocs build (strict)
+        run: mkdocs build --strict

@@ -111,6 +111,7 @@ Tuning workflow and H2 details: **[test-report-server/README.md](test-report-ser
 
 | Doc | Topic |
 |-----|--------|
+| **[docs/documentation-generator/](docs/documentation-generator/)** | **MkDocs site** — `mkdocs serve` / `build` aggregates README, `docs/`, milestones ([Milestone 3](milestones/milestone-3.md)) |
 | **[docs/DWAVE_LEAP_SETUP.md](docs/DWAVE_LEAP_SETUP.md)** | D-Wave Leap token & venv |
 | **[dwave.md](dwave.md)** | DICE + QUBO + Leap architecture |
 | **[docs/adr/0002-dice-leap-subprocess-bridge.md](docs/adr/0002-dice-leap-subprocess-bridge.md)** | JVM ↔ Python bridge |

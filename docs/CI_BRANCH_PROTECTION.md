@@ -11,6 +11,7 @@ Use these workflows as **required** for `main` (or your default branch):
 | [`dice-leap-poc.yml`](../.github/workflows/dice-leap-poc.yml) | Python PoC: `requirements.txt` + `pytest` (local classical only). |
 | [`java-modules.yml`](../.github/workflows/java-modules.yml) | Java reactor: `mvn test` for `embabel-dice-rca`, `dice-server`, `test-report-server`. |
 | [`test-report-server.yml`](../.github/workflows/test-report-server.yml) | `mvn test` in `test-report-server` plus **Playwright** UI/API smoke (`e2e-ui` job). |
+| [`docs-site.yml`](../.github/workflows/docs-site.yml) | **MkDocs** `build --strict` for [documentation-generator](documentation-generator/) when docs / milestones / root README change. Optional as a required check ([Milestone 3](../milestones/milestone-3.md)). |
 
 ## Do **not** require by default
 

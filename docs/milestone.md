@@ -28,4 +28,14 @@ Tracked items from session work on datadog-drilldown (embabel-dice-rca, dice-ser
 
 ---
 
-*Last updated: 2026-01-23*
+---
+
+## 4. Documentation site (MkDocs)
+
+- **Status:** See [milestones/milestone-3.md](../milestones/milestone-3.md)  
+- **Context:** [docs/documentation-generator/README.md](documentation-generator/README.md) builds a static site from existing markdown (includes at build time).  
+- **Goal:** Curate nav (module READMEs, diagrams), optional GitHub Pages; CI `docs-site` workflow verifies `mkdocs build --strict`.
+
+---
+
+*Last updated: 2026-03-22*

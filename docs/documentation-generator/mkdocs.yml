@@ -1,0 +1,59 @@
+# Built from docs/documentation-generator — run: pip install -r requirements.txt && mkdocs build
+site_name: Datadog Drilldown
+site_description: RCA, DICE, QUBO / D-Wave — project documentation
+site_url: !ENV [SITE_URL, '']
+
+repo_url: https://github.com/menkelabs/datadog-drilldown
+edit_uri: edit/main/docs/documentation-generator/docs/
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - content.code.copy
+
+plugins:
+  - search
+  - include-markdown:
+      preserve_includer_indent: false
+      dedent: true
+      trailing_newlines: true
+
+strict: true
+
+nav:
+  - Home: index.md
+  - Repository README: readme.md
+  - D-Wave & QUBO:
+      - Concept spec (dwave.md): dwave.md
+      - Leap API setup: leap-setup.md
+      - QUBO metrics (v1): qubo-metrics.md
+      - QUBO DAG node: qubo-dag.md
+      - ADR 0002 — Python bridge: adr-0002.md
+  - Milestones:
+      - Milestone 1: milestone-1.md
+      - Milestone 2: milestone-2.md
+      - Milestone 3 (doc generator): milestone-3.md
+  - Operations:
+      - CI & branch protection: ci-branch-protection.md
+      - Diagrams (overview): diagrams.md
+
+markdown_extensions:
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - tables
+  - toc:
+      permalink: true

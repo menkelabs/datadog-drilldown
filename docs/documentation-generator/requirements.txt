@@ -1,0 +1,4 @@
+# MkDocs site for datadog-drilldown (see README.md in this folder)
+mkdocs>=1.6.0,<2
+mkdocs-material>=9.5.0,<10
+mkdocs-include-markdown-plugin>=6.0.0,<7
