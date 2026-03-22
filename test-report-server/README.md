@@ -20,12 +20,17 @@ mvn -f test-report-server/pom.xml spring-boot:run
 Open **http://localhost:8081** for the UI. The UI lets you:
 
 - **Run tests**: optional pattern (e.g. `AllScenarios`, `DiceRcaIntegration`), optional verbose. Triggers `embabel-dice-rca/run-tests-with-server.sh`, then polls for results.
+- View **summary** and **recent runs**.
+- **Filter** runs by run ID, scenario, status.
+- **View** individual run details (click ID).
 
 ## UI / API E2E tests (Playwright)
 
-Browser smoke tests live under **[e2e/](e2e/)**. They start Spring Boot on port **18081** (via `SERVER_PORT`) and assert the main page, panels, and a few REST endpoints.
+Browser smoke tests live under **[e2e/](e2e/)** (`package-lock.json` is **only** there). They start Spring Boot on port **18081** (via `SERVER_PORT`) and assert the main page, panels, and a few REST endpoints.
 
 **Prerequisites:** JDK 21, Maven, Node 20+.
+
+**Do not run `npm ci` in `test-report-server/` alone** — it has no lockfile. Either `cd e2e` first, or use the npm scripts below from `test-report-server/`.
 
 ```bash
 cd test-report-server/e2e
@@ -34,10 +39,15 @@ npx playwright install chromium   # first time only
 npm test
 ```
 
+Or from **`test-report-server/`** (parent of `e2e/`):
+
+```bash
+npm run e2e:ci              # same as npm ci inside e2e/
+npm run e2e:browsers        # install Chromium for Playwright (first time / after upgrade)
+npm run e2e:test            # playwright test
+```
+
 CI runs the same suite in [`.github/workflows/test-report-server.yml`](../.github/workflows/test-report-server.yml) (`e2e-ui` job after `mvn test`).
-- View **summary** and **recent runs**.
-- **Filter** runs by run ID, scenario, status.
-- **View** individual run details (click ID).
 
 ## Configuration
 

@@ -1,0 +1,11 @@
+{
+  "name": "test-report-server-scripts",
+  "private": true,
+  "description": "Convenience scripts; Playwright app and lockfile live in ./e2e",
+  "scripts": {
+    "e2e:ci": "npm ci --prefix e2e",
+    "e2e:browsers": "npm run install:browsers --prefix e2e",
+    "e2e:test": "npm test --prefix e2e",
+    "e2e": "npm run e2e:ci && npm run e2e:browsers && npm run e2e:test"
+  }
+}
