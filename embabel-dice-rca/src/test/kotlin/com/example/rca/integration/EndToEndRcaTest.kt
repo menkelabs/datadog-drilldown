@@ -13,6 +13,7 @@ import com.example.rca.dice.DiceProposition
 import com.example.rca.dice.model.*
 import com.example.rca.domain.*
 import com.example.rca.fixtures.TestScenarios
+import com.example.rca.testsupport.disabledQuboReportEnricher
 import com.example.rca.mock.MockDatadogClient
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -52,7 +53,8 @@ class EndToEndRcaTest {
             metricAnalyzer = metricAnalyzer,
             apmAnalyzer = apmAnalyzer,
             scoringEngine = scoringEngine,
-            chatAdvisor = chatAdvisor
+            chatAdvisor = chatAdvisor,
+            quboReportEnricher = disabledQuboReportEnricher(),
         )
 
         val eventPublisher = ApplicationEventPublisher { }

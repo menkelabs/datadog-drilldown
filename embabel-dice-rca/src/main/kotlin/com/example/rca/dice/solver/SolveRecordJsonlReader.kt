@@ -12,6 +12,13 @@ import kotlin.io.path.isRegularFile
 object SolveRecordJsonlReader {
     private val mapper = jacksonObjectMapper()
 
+    /** Parse a single JSON line (same format as one JSONL record). */
+    fun parseLine(line: String): SolveRecord {
+        val trimmed = line.trim()
+        require(trimmed.isNotEmpty()) { "SolveRecord line is blank" }
+        return mapper.readValue<SolveRecord>(trimmed)
+    }
+
     fun readFile(path: Path): List<SolveRecord> {
         if (!path.isRegularFile()) return emptyList()
         return Files.readAllLines(path)

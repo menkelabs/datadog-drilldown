@@ -1,6 +1,7 @@
 package com.example.rca
 
 import com.example.rca.agent.RcaAgentProperties
+import com.example.rca.dice.qubo.QuboIntegrationProperties
 import org.springframework.boot.autoconfigure.SpringBootApplication
 import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.boot.runApplication
@@ -23,7 +24,7 @@ import org.springframework.boot.runApplication
  * 4. Generate actionable recommendations
  */
 @SpringBootApplication
-@EnableConfigurationProperties(RcaAgentProperties::class)
+@EnableConfigurationProperties(RcaAgentProperties::class, QuboIntegrationProperties::class)
 class EmbabelDiceRcaApplication
 
 fun main(args: Array<String>) {

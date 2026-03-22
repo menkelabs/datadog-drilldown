@@ -12,6 +12,7 @@ import com.example.rca.dice.IngestResponse
 import com.example.rca.dice.DiceProposition
 import com.example.rca.dice.model.*
 import com.example.rca.fixtures.TestScenarios
+import com.example.rca.testsupport.disabledQuboReportEnricher
 import com.example.rca.mock.MockDatadogClient
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -55,7 +56,8 @@ class DiceIngestionIntegrationTest {
             metricAnalyzer = metricAnalyzer,
             apmAnalyzer = apmAnalyzer,
             scoringEngine = scoringEngine,
-            chatAdvisor = chatAdvisor
+            chatAdvisor = chatAdvisor,
+            quboReportEnricher = disabledQuboReportEnricher(),
         )
 
         // Create ingestion service with no-op event publisher and mock dice client

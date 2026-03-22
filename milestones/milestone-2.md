@@ -49,11 +49,11 @@ Close the gap between **synthetic PoC** and **production-shaped** behavior:
 
 ### M2a — Integration spine (`embabel-dice-rca` + solver boundary)
 
-- [ ] **A1 — Instance model in JVM** — Map RCA artifacts (candidates, conflicts, deps, costs/signals) to JSON compatible with `dice-leap-poc` / `SolveRecord` contract (reuse or bump `encoding_version`).
-- [ ] **A2 — Extraction hook** — Bounded pipeline step that **emits** an instance when rollover rules justify QUBO (mirror Python `strategy` or shared rules).
-- [ ] **A3 — Solver invocation** — ADR: **subprocess** / **HTTP sidecar** / **Kotlin port**; smallest first (e.g. `ProcessBuilder` + JSONL parse).
-- [ ] **A4 — Result interpreter** — Map `SolveRecord` / selected decisions back into agent context (propositions, next actions, UI).
-- [ ] **A5 — Feature flags** — Default off in prod until acceptance; ITs use **recorded** fixtures (no live Datadog in CI).
+- [x] **A1 — Instance model in JVM** — `QuboInstancePayload` + `RcaCandidateToQuboInstanceMapper` map ranked candidates → dice-leap-poc JSON (`encoding_version` **1**).
+- [x] **A2 — Extraction hook** — `RcaAgent` calls `QuboReportEnricher` after `buildReport` (rollover via `QuboRolloverPlanner`, aligned with Python thresholds).
+- [x] **A3 — Solver invocation** — ADR [docs/adr/0002-dice-leap-subprocess-bridge.md](../docs/adr/0002-dice-leap-subprocess-bridge.md); `DiceLeapPythonSolver` runs `dice-leap-poc/scripts/solve_json.py` + `SolveRecordJsonlReader.parseLine`.
+- [x] **A4 — Result interpreter** — `findings["qubo"]` includes `solve_record`, `selected_candidate_titles`, and an extra **recommendation** line when selections exist (deeper propositions/UI later).
+- [x] **A5 — Feature flags** — `embabel.rca.qubo.enabled` default **false**; optional IT `DiceLeapPythonSolverIntegrationTest` if `DICE_LEAP_POC_ROOT` is set.
 
 ### M2b — Observability (metrics implementation)
 
@@ -115,3 +115,4 @@ Close the gap between **synthetic PoC** and **production-shaped** behavior:
 
 - **2026-01-25:** Milestone 2 drafted (gap analysis).
 - **2026-01-25:** Split into **M2a–M2d** phases with exit criteria and checklist mapping.
+- **2026-01-25:** M2a first slice: subprocess bridge, mapper, enricher, `solve_json.py`, ADR 0002.

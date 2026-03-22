@@ -44,6 +44,22 @@ export DD_APP_KEY="your-datadog-app-key"
 export DD_SITE="datadoghq.com"  # or datadoghq.eu, etc.
 ```
 
+### Optional: QUBO bridge (`dice-leap-poc`, off by default)
+
+After RCA, the app can call the Python **dice-leap-poc** solver via subprocess ([ADR 0002](../docs/adr/0002-dice-leap-subprocess-bridge.md)).
+
+```bash
+# Path to the dice-leap-poc directory (contains scripts/solve_json.py)
+export DICE_LEAP_POC_ROOT="/path/to/datadog-drilldown/dice-leap-poc"
+# Install: cd dice-leap-poc && pip install -e .
+```
+
+In `application.yml` / env:
+
+- `embabel.rca.qubo.enabled=true` — turn on enrichment (`findings["qubo"]` + optional recommendation line).
+- `embabel.rca.qubo.python-executable` — default `python3`.
+- `embabel.rca.qubo.dice-leap-poc-root` — defaults to `DICE_LEAP_POC_ROOT` if set.
+
 ### Running the Agent
 
 ```bash

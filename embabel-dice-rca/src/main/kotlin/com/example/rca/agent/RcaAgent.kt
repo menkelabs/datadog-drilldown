@@ -1,6 +1,7 @@
 package com.example.rca.agent
 
 import com.example.rca.analysis.*
+import com.example.rca.dice.qubo.QuboReportEnricher
 import com.example.rca.datadog.DatadogClient
 import com.example.rca.datadog.DatadogException
 import com.example.rca.datadog.dto.toLogEntry
@@ -28,7 +29,8 @@ class RcaAgent(
     private val metricAnalyzer: MetricAnalyzer,
     private val apmAnalyzer: ApmAnalyzer,
     private val scoringEngine: ScoringEngine,
-    private val chatAdvisor: ChatAdvisor
+    private val chatAdvisor: ChatAdvisor,
+    private val quboReportEnricher: QuboReportEnricher,
 ) {
     private val logger = LoggerFactory.getLogger(javaClass)
 
@@ -72,7 +74,7 @@ class RcaAgent(
 
             logger.info("Completed RCA analysis for incident: ${context.id}, found ${allCandidates.size} candidates")
 
-            return report
+            return quboReportEnricher.enrich(report, context)
         } catch (e: Exception) {
             logger.error("Analysis failed for incident: ${context.id}", e)
             throw e

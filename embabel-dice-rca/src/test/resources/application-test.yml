@@ -15,6 +15,9 @@ embabel:
   api-key: ""
   model: gpt-4-mock
   temperature: 0.0
+  rca:
+    qubo:
+      enabled: false
 
 # Dice configuration for tests
 dice:
