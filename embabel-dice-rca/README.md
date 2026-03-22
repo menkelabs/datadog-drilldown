@@ -68,6 +68,8 @@ export DICE_LEAP_POC_ROOT="/path/to/datadog-drilldown/dice-leap-poc"
 # Install: cd dice-leap-poc && pip install -e .
 ```
 
+For **D-Wave Leap** (optional; default solve is local classical): install `pip install -e ".[leap]"` in that venv and set **`DWAVE_API_TOKEN`** (or `dwave setup`) — see **[docs/DWAVE_LEAP_SETUP.md](../docs/DWAVE_LEAP_SETUP.md)**. The JVM subprocess inherits your shell env.
+
 In `application.yml` / env:
 
 - `embabel.rca.qubo.enabled=true` — turn on enrichment (`findings["qubo"]` + optional recommendation line).

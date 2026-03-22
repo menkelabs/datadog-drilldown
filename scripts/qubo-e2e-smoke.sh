@@ -5,6 +5,7 @@
 #   ./scripts/qubo-e2e-smoke.sh              # venv, pip install, toy solve, JVM IT
 #   ./scripts/qubo-e2e-smoke.sh --skip-mvn   # Python-only (no JDK/Maven)
 #   ./scripts/qubo-e2e-smoke.sh --no-hints   # omit Spring Boot env hints at the end
+#   ./scripts/qubo-e2e-smoke.sh --verbose    # full Maven/JUnit output + optional log file (debug / paste to assistant)
 #
 set -euo pipefail
 
@@ -12,17 +13,30 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 POC="$ROOT/dice-leap-poc"
 SKIP_MVN=false
 NO_HINTS=false
+VERBOSE=false
+LOG_FILE=""
 
 for arg in "$@"; do
   case "$arg" in
     --skip-mvn) SKIP_MVN=true ;;
     --no-hints) NO_HINTS=true ;;
+    --verbose) VERBOSE=true ;;
+    --log=*)
+      LOG_FILE="${arg#--log=}"
+      VERBOSE=true
+      ;;
     -h|--help)
-      echo "Usage: $0 [--skip-mvn] [--no-hints]"
+      echo "Usage: $0 [--skip-mvn] [--no-hints] [--verbose] [--log=PATH]"
+      echo "  --verbose   Maven without -q, -e on errors; louder pip; good for debugging / sharing logs"
+      echo "  --log=PATH  tee Maven step to PATH (implies --verbose)"
       exit 0
       ;;
   esac
 done
+
+if [[ -n "${QUBO_SMOKE_VERBOSE:-}" ]]; then
+  VERBOSE=true
+fi
 
 if [[ ! -f "$POC/pyproject.toml" ]]; then
   echo "error: dice-leap-poc not found at $POC" >&2
@@ -37,15 +51,28 @@ if [[ ! -d "$POC/.venv" ]]; then
 fi
 # shellcheck source=/dev/null
 source "$POC/.venv/bin/activate"
+VENV_PY="$POC/.venv/bin/python"
+if [[ ! -x "$VENV_PY" ]]; then
+  echo "error: venv python missing: $VENV_PY" >&2
+  exit 1
+fi
 
 echo "==> pip install -e .[dev] (in dice-leap-poc)"
-pip install -q -U pip
-( cd "$POC" && pip install -q -e ".[dev]" )
+if [[ "$VERBOSE" == "true" ]]; then
+  pip install -U pip
+  ( cd "$POC" && pip install -e ".[dev]" )
+else
+  pip install -q -U pip
+  ( cd "$POC" && pip install -q -e ".[dev]" )
+fi
 
 export DICE_LEAP_POC_ROOT="$POC"
+# Maven/JUnit do not reliably inherit `activate` PATH — force the same interpreter the JVM test will use.
+export PYTHON="$VENV_PY"
+export QUBO_PYTHON_EXECUTABLE="$VENV_PY"
 
 echo "==> Python: solve_json.py (toy fixture, qubo + local_classical)"
-PYTHONPATH="$POC" python3 "$POC/scripts/solve_json.py" \
+PYTHONPATH="$POC" "$VENV_PY" "$POC/scripts/solve_json.py" \
   --input "$POC/sample_data/toy_dw_md.json" \
   --strategy-choice qubo
 
@@ -53,7 +80,21 @@ if [[ "$SKIP_MVN" == "true" ]]; then
   echo "==> Skipping Maven (JVM) test (--skip-mvn)"
 else
   echo "==> JVM: DiceLeapPythonSolverIntegrationTest (requires mvn + JDK 21)"
-  (cd "$ROOT/embabel-dice-rca" && mvn -q test -Dtest=DiceLeapPythonSolverIntegrationTest)
+  echo "    (PYTHON=$PYTHON)"
+  run_mvn() {
+    (cd "$ROOT/embabel-dice-rca" && mvn "$@")
+  }
+  if [[ "$VERBOSE" == "true" ]]; then
+    MVN_ARGS=(test -Dtest=DiceLeapPythonSolverIntegrationTest -e -DtrimStackTrace=false)
+    if [[ -n "$LOG_FILE" ]]; then
+      echo "    (tee Maven output -> $LOG_FILE)"
+      run_mvn "${MVN_ARGS[@]}" 2>&1 | tee "$LOG_FILE"
+    else
+      run_mvn "${MVN_ARGS[@]}"
+    fi
+  else
+    run_mvn -q test -Dtest=DiceLeapPythonSolverIntegrationTest
+  fi
 fi
 
 echo ""

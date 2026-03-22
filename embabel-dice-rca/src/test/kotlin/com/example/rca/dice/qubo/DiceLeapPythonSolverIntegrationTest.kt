@@ -7,11 +7,13 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable
 import java.nio.file.Files
 import java.nio.file.Path
+import kotlin.io.path.isExecutable
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * Requires repo layout: DICE_LEAP_POC_ROOT points at `dice-leap-poc/` and Python deps installed (`pip install -e .`).
+ * Requires repo layout: `DICE_LEAP_POC_ROOT` points at `dice-leap-poc/` and Python deps installed (`pip install -e .`).
+ * Interpreter resolution: `QUBO_PYTHON_EXECUTABLE`, then `PYTHON`, then `$DICE_LEAP_POC_ROOT/.venv/bin/python` if executable, else `python3`.
  */
 @EnabledIfEnvironmentVariable(named = "DICE_LEAP_POC_ROOT", matches = ".+")
 class DiceLeapPythonSolverIntegrationTest {
@@ -22,10 +24,11 @@ class DiceLeapPythonSolverIntegrationTest {
         val toy = Path.of(root, "sample_data", "toy_dw_md.json")
         assertTrue(Files.isRegularFile(toy), "missing $toy")
 
+        val pyExe = resolvePythonForDiceLeapPoc(root)
         val props = QuboIntegrationProperties(
             enabled = true,
             diceLeapPocRoot = root,
-            pythonExecutable = System.getenv("PYTHON")?.trim()?.ifEmpty { null } ?: "python3",
+            pythonExecutable = pyExe,
         )
         val solver = DiceLeapPythonSolver(
             props,
@@ -47,6 +50,23 @@ class DiceLeapPythonSolverIntegrationTest {
             }
         } finally {
             Files.deleteIfExists(temp)
+        }
+    }
+
+    companion object {
+        fun resolvePythonForDiceLeapPoc(root: String): String {
+            fun envNonBlank(name: String): String? =
+                System.getenv(name)?.trim()?.takeIf { it.isNotEmpty() }
+
+            envNonBlank("QUBO_PYTHON_EXECUTABLE")?.let { return it }
+            envNonBlank("PYTHON")?.let { return it }
+
+            val venvPy = Path.of(root, ".venv", "bin", "python")
+            if (venvPy.isExecutable()) {
+                return venvPy.toAbsolutePath().toString()
+            }
+
+            return "python3"
         }
     }
 }

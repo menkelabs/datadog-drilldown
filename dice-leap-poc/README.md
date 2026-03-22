@@ -6,6 +6,8 @@ Python prototype: structured decision instances → **QUBO** → **local classic
 
 **Spec / roadmap:** [dwave.md](../dwave.md) · [milestones/milestone-1.md](../milestones/milestone-1.md)
 
+**D-Wave Leap token (optional cloud solver):** step-by-step **[docs/DWAVE_LEAP_SETUP.md](../docs/DWAVE_LEAP_SETUP.md)** — account, `DWAVE_API_TOKEN`, `pip install ".[dev,leap]"`, verify with `pytest -m leap` or `solve_json.py --solver-mode leap_hybrid`.
+
 ## Install
 
 ```bash
@@ -24,7 +26,8 @@ pip install -e ".[dev]"
 **Optional Leap (Phase 2 / M2d):**
 
 - **When to use:** Cloud hybrid sampler for larger BQMs or when you want D-Wave-managed hybrid instead of local simulated annealing. **Default dev/CI:** stay on `local_classical` (no token, no quota).
-- **Token:** `export DWAVE_API_TOKEN="..."` or `dwave setup`. Respect org quota and cost policies.
+- **Obtain & configure token:** see **[docs/DWAVE_LEAP_SETUP.md](../docs/DWAVE_LEAP_SETUP.md)** (Leap signup, dashboard or `dwave setup --auth`, `DWAVE_API_TOKEN`, verification).
+- **Quick ref:** `export DWAVE_API_TOKEN="..."` or `dwave setup`. Respect org quota and cost policies.
 - **CI:** Required checks use [`.github/workflows/dice-leap-poc.yml`](../.github/workflows/dice-leap-poc.yml) (no Leap). Optional [`.github/workflows/dice-leap-poc-leap.yml`](../.github/workflows/dice-leap-poc-leap.yml) runs `pytest -m leap` only when repo secret `DWAVE_API_TOKEN` is set (plus manual `workflow_dispatch`).
 
 ```bash

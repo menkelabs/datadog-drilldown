@@ -41,7 +41,7 @@ The system consists of two primary Kotlin/Spring Boot modules:
 
 **Milestone 2:** First-pass **M2a–M2d** in **[milestones/milestone-2.md](milestones/milestone-2.md)** — RCA→Python QUBO bridge (flagged), **telemetry** ([QUBO_METRICS_V1.md](docs/QUBO_METRICS_V1.md)), **DAG/resilience** doc + retries/fallback, **Maven reactor** + **`java-modules.yml`**, optional **Leap** workflow.
 
-**Docs:** **[docs/DWAVE_REAL_WORLD_METRICS.md](docs/DWAVE_REAL_WORLD_METRICS.md)** (broader pilot plan) · **[docs/QUBO_METRICS_V1.md](docs/QUBO_METRICS_V1.md)** (v1 JVM emission).
+**Docs:** **[docs/DWAVE_LEAP_SETUP.md](docs/DWAVE_LEAP_SETUP.md)** (Leap API token & venv) · **[docs/DWAVE_REAL_WORLD_METRICS.md](docs/DWAVE_REAL_WORLD_METRICS.md)** (broader pilot plan) · **[docs/QUBO_METRICS_V1.md](docs/QUBO_METRICS_V1.md)** (v1 JVM emission).
 
 ## Setup
 
