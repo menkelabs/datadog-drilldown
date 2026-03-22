@@ -44,6 +44,20 @@ export DD_APP_KEY="your-datadog-app-key"
 export DD_SITE="datadoghq.com"  # or datadoghq.eu, etc.
 ```
 
+### Tracing (optional)
+
+The QUBO Python subprocess is wrapped in a Micrometer **Observation** (`qubo.python.solve`), which becomes an **OpenTelemetry span** when tracing is enabled. Dependency: `micrometer-tracing-bridge-otel`.
+
+```yaml
+# example: raise sampling for local debugging
+management:
+  tracing:
+    sampling:
+      probability: 1.0
+```
+
+Set `TRACE_SAMPLING_PROBABILITY` or add `management.otlp.tracing.endpoint` per Spring Boot OTLP docs to export to a collector.
+
 ### Optional: QUBO bridge (`dice-leap-poc`, off by default)
 
 After RCA, the app can call the Python **dice-leap-poc** solver via subprocess ([ADR 0002](../docs/adr/0002-dice-leap-subprocess-bridge.md)).

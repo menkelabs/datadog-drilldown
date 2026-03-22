@@ -61,6 +61,8 @@ mvn test
 
 Uses root [`pom.xml`](pom.xml) as aggregator. You can still build a single module with `cd embabel-dice-rca && mvn test`, etc.
 
+**Branch protection:** see **[docs/CI_BRANCH_PROTECTION.md](docs/CI_BRANCH_PROTECTION.md)** for which GitHub Actions to mark **required** vs optional (e.g. Leap).
+
 ### Configuration
 
 #### Environment Variables

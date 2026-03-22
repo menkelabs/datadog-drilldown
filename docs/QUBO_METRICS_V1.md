@@ -32,6 +32,14 @@ These fields are emitted on **structured log** lines prefixed with `qubo_telemet
 | `qubo.subprocess` | Timer | `outcome` |
 | `qubo.enrichment` | Counter | `outcome` |
 
+### 2b. Tracing (OpenTelemetry bridge)
+
+| Observation name | Contextual name | Tags |
+|------------------|-----------------|------|
+| `qubo.python.solve` | `qubo-python-solve` | `case.id` |
+
+Emits an OTel-compatible span when Micrometer tracing + OTLP (or an OTel agent) is active. See [QUBO_DAG_NODE.md](QUBO_DAG_NODE.md) §D3.
+
 ## 3. Datadog log search examples (C3)
 
 Assume JSON or key=value parsing from raw message, or map log pipeline to extract fields.

@@ -1,6 +1,8 @@
 package com.example.rca.dice.qubo
 
+import com.example.rca.dice.qubo.QuboObservationHelper
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
+import io.micrometer.observation.ObservationRegistry
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable
 import java.nio.file.Files
@@ -25,7 +27,11 @@ class DiceLeapPythonSolverIntegrationTest {
             diceLeapPocRoot = root,
             pythonExecutable = System.getenv("PYTHON")?.trim()?.ifEmpty { null } ?: "python3",
         )
-        val solver = DiceLeapPythonSolver(props, QuboSolverMetrics(SimpleMeterRegistry()))
+        val solver = DiceLeapPythonSolver(
+            props,
+            QuboSolverMetrics(SimpleMeterRegistry()),
+            QuboObservationHelper(ObservationRegistry.create()),
+        )
         val temp = Files.createTempFile("inst-", ".json")
         try {
             Files.copy(toy, temp, java.nio.file.StandardCopyOption.REPLACE_EXISTING)

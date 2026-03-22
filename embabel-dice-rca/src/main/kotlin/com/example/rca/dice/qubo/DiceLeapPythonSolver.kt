@@ -18,10 +18,18 @@ import kotlin.math.max
 class DiceLeapPythonSolver(
     private val properties: QuboIntegrationProperties,
     private val metrics: QuboSolverMetrics,
+    private val observationHelper: QuboObservationHelper,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
-    fun solve(instanceJsonFile: Path, forceStrategy: String? = null): SolveWithAttempts {
+    fun solve(
+        instanceJsonFile: Path,
+        forceStrategy: String? = null,
+        traceCaseId: String = "unknown",
+    ): SolveWithAttempts =
+        observationHelper.observePythonSolve(traceCaseId) { solveWithoutObservation(instanceJsonFile, forceStrategy) }
+
+    private fun solveWithoutObservation(instanceJsonFile: Path, forceStrategy: String?): SolveWithAttempts {
         val attempts = max(1, properties.maxSubprocessAttempts)
         var last: SolveResult = SolveResult.Failure("no attempts")
         var totalMs = 0L

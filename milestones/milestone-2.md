@@ -108,6 +108,7 @@ Close the gap between **synthetic PoC** and **production-shaped** behavior:
 - [dwave.md](../dwave.md)  
 - [docs/QUBO_METRICS_V1.md](../docs/QUBO_METRICS_V1.md)  
 - [docs/QUBO_DAG_NODE.md](../docs/QUBO_DAG_NODE.md)  
+- [docs/CI_BRANCH_PROTECTION.md](../docs/CI_BRANCH_PROTECTION.md)  
 - [dice-leap-poc/README.md](../dice-leap-poc/README.md)  
 - [test-report-server/README.md](../test-report-server/README.md)  
 
@@ -119,3 +120,4 @@ Close the gap between **synthetic PoC** and **production-shaped** behavior:
 - **2026-01-25:** Split into **M2a–M2d** phases with exit criteria and checklist mapping.
 - **2026-01-25:** M2a first slice: subprocess bridge, mapper, enricher, `solve_json.py`, ADR 0002.
 - **2026-01-25:** M2b–M2d: `QUBO_METRICS_V1` + Micrometer, `QUBO_DAG_NODE`, retries/fallback, root `pom.xml`, `java-modules.yml`, optional `dice-leap-poc-leap.yml`.
+- **2026-01-25:** Follow-ups: OTel observation `qubo.python.solve`, Embabel `runQuboShortlist` DAG node + `EmbabelQuboNodeService`, [docs/CI_BRANCH_PROTECTION.md](../docs/CI_BRANCH_PROTECTION.md).

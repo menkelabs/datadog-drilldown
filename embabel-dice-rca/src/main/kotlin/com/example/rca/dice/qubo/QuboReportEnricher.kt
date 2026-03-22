@@ -82,7 +82,7 @@ class QuboReportEnricher(
         val temp = Files.createTempFile("qubo-instance-", ".json")
         try {
             json.writeValue(temp.toFile(), build.payload)
-            val sw = pythonSolver.solve(temp, forceStrategy = "qubo")
+            val sw = pythonSolver.solve(temp, forceStrategy = "qubo", traceCaseId = context.id)
             when (val r = sw.result) {
                 is SolveResult.Failure -> {
                     quboBlock["error"] = r.message

@@ -1,11 +1,11 @@
-# QUBO solver as an agent workflow node (M2c)
+# QUBO solver as an agent workflow node (M2c + follow-ups)
 
-**Status:** Contract + resilience layer; full Embabel DAG wiring is a follow-up.  
-**Related:** [docs/architecture/agent-workflow.puml](architecture/agent-workflow.puml) (Embabel RCA flow), [ADR 0002](adr/0002-dice-leap-subprocess-bridge.md).
+**Status:** Implemented for **RcaAgent** (Datadog pipeline) and **IncidentInvestigatorAgent** (Embabel shell).  
+**Related:** [docs/architecture/agent-workflow.puml](architecture/agent-workflow.puml), [ADR 0002](adr/0002-dice-leap-subprocess-bridge.md), [CI_BRANCH_PROTECTION.md](CI_BRANCH_PROTECTION.md).
 
 ## D1 — Workflow model (inputs / outputs)
 
-Treat **QUBO enrichment** as a logical node:
+### Path A — `RcaAgent` (monitor / logs / service analysis)
 
 | Direction | Artifact |
 |-----------|----------|
@@ -14,7 +14,14 @@ Treat **QUBO enrichment** as a logical node:
 | **Out** | Same `Report` with `findings["qubo"]` populated: `strategy_*`, optional `solve_record`, `selected_candidate_titles`, `fallback` flags. |
 | **Side effect** | Python subprocess (`solve_json.py`) → stdout `SolveRecord` JSON line. |
 
-This matches the DAG mental model **instance in → SolveRecord out**, even though today it is invoked synchronously from `RcaAgent` after the main RCA steps.
+### Path B — `IncidentInvestigatorAgent` (Embabel DAG)
+
+| Step | Embabel `@Action` | Notes |
+|------|-------------------|--------|
+| After critique accepts | `runQuboShortlist` | `pre = analysisSatisfactory`, `post = quboNodeDone`. |
+| Final report | `generateReport` | `pre = quboNodeDone`; prompt includes `QuboShortlistResult.promptSection()`. |
+
+[`EmbabelQuboNodeService`](../embabel-dice-rca/src/main/kotlin/com/example/rca/agent/EmbabelQuboNodeService.kt) maps `RootCauseAnalysis.candidates` → domain [`Candidate`](../embabel-dice-rca/src/main/kotlin/com/example/rca/domain/Candidate.kt) and reuses [`QuboReportEnricher`](../embabel-dice-rca/src/main/kotlin/com/example/rca/dice/qubo/QuboReportEnricher.kt). When `embabel.rca.qubo.enabled=false`, the node returns `QuboShortlistResult(skipped=true)` immediately so the DAG always reaches `generateReport`.
 
 ## D2 — Idempotency, timeouts, fallback
 
@@ -31,5 +38,6 @@ Idempotency: each analysis run builds a fresh temp instance file; no shared muta
 
 - **Micrometer:** `qubo.subprocess` timer, `qubo.enrichment` counter (tag `outcome`).
 - **Logs:** `qubo_telemetry` structured line (see [QUBO_METRICS_V1.md](QUBO_METRICS_V1.md)).
+- **Tracing:** Micrometer **Observation** `qubo.python.solve` (contextual name `qubo-python-solve`, low-cardinality tag `case.id`) wraps the Python subprocess in [`QuboObservationHelper`](../embabel-dice-rca/src/main/kotlin/com/example/rca/dice/qubo/QuboObservationHelper.kt). With `micrometer-tracing-bridge-otel` on the classpath, this maps to an **OpenTelemetry span** when a tracer is configured (e.g. OTLP exporter via Spring Boot `management.otlp.tracing.*` or an OTel Java agent).
 
-Optional later: OpenTelemetry span `qubo.solve` around subprocess (not in v1).
+Sampling: `management.tracing.sampling.probability` (default `0.1` unless overridden by `TRACE_SAMPLING_PROBABILITY`).

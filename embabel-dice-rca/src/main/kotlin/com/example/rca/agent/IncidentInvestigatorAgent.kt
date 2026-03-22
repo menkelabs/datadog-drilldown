@@ -127,7 +127,8 @@ class RcaAgentProperties(
  * 2. Collect evidence using Datadog MCP tools (logs, metrics, traces, events)
  * 3. Analyze patterns and identify root cause candidates
  * 4. Self-critique for quality assurance
- * 5. Generate actionable recommendations
+ * 5. **runQuboShortlist** — optional QUBO node (dice-leap-poc) when `embabel.rca.qubo.enabled`
+ * 6. Generate actionable recommendations
  *
  * Tools available during investigation:
  * - datadog_search_logs: Find error patterns
@@ -142,6 +143,7 @@ class RcaAgentProperties(
 class IncidentInvestigatorAgent(
     val properties: RcaAgentProperties,
     val datadogTools: DatadogTools,  // Injected for tool registration
+    private val embabelQuboNodeService: EmbabelQuboNodeService,
 ) {
     private val logger = LoggerFactory.getLogger(IncidentInvestigatorAgent::class.java)
 
@@ -368,10 +370,28 @@ class IncidentInvestigatorAgent(
         )
 
     /**
-     * Generate the final investigation report with recommendations.
+     * QUBO / dice-leap-poc shortlist node (M2 follow-up): runs after critique accepts analysis.
+     * No-op when `embabel.rca.qubo.enabled` is false.
      */
     @Action(
         pre = [ANALYSIS_SATISFACTORY],
+        post = [QUBO_NODE_DONE],
+    )
+    fun runQuboShortlist(
+        request: IncidentRequest,
+        analysis: RootCauseAnalysis,
+        critique: AnalysisCritique,
+        context: OperationContext,
+    ): QuboShortlistResult {
+        logger.info("Embabel DAG node: runQuboShortlist")
+        return embabelQuboNodeService.runShortlist(request, analysis)
+    }
+
+    /**
+     * Generate the final investigation report with recommendations.
+     */
+    @Action(
+        pre = [QUBO_NODE_DONE],
         outputBinding = "finalReport",
     )
     @AchievesGoal(
@@ -383,6 +403,7 @@ class IncidentInvestigatorAgent(
         evidence: DatadogEvidence,
         analysis: RootCauseAnalysis,
         critique: AnalysisCritique,
+        quboShortlist: QuboShortlistResult,
         context: OperationContext,
     ): InvestigationReport = context.ai()
         .withLlm(properties.analysisModel)
@@ -407,6 +428,8 @@ class IncidentInvestigatorAgent(
 
             ## Evidence Summary
             ${evidence.summary}
+
+            ## ${quboShortlist.promptSection()}
 
             ## Create Report With:
             1. **summary**: Executive summary (2-3 sentences)
@@ -446,10 +469,17 @@ class IncidentInvestigatorAgent(
     fun analysisUnsatisfactory(critique: AnalysisCritique): Boolean =
         !critique.accepted
 
+    /**
+     * Satisfied after [runQuboShortlist] completes (even when QUBO is disabled — service returns skipped).
+     */
+    @Condition(name = QUBO_NODE_DONE)
+    fun quboNodeDone(@Suppress("UNUSED_PARAMETER") result: QuboShortlistResult): Boolean = true
+
     companion object {
         const val EVIDENCE_COLLECTED = "evidenceCollected"
         const val ANALYSIS_COMPLETE = "analysisComplete"
         const val ANALYSIS_SATISFACTORY = "analysisSatisfactory"
         const val ANALYSIS_UNSATISFACTORY = "analysisUnsatisfactory"
+        const val QUBO_NODE_DONE = "quboNodeDone"
     }
 }

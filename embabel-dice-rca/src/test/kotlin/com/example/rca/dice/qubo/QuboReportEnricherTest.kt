@@ -8,7 +8,9 @@ import com.example.rca.domain.ReportMeta
 import com.example.rca.domain.Scope
 import com.example.rca.domain.SeedType
 import com.example.rca.domain.Windows
+import com.example.rca.dice.qubo.QuboObservationHelper
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
+import io.micrometer.observation.ObservationRegistry
 import org.junit.jupiter.api.Test
 import java.time.Instant
 import kotlin.test.assertEquals
@@ -21,7 +23,8 @@ class QuboReportEnricherTest {
     private fun enricher(props: QuboIntegrationProperties): QuboReportEnricher {
         val reg = SimpleMeterRegistry()
         val m = QuboSolverMetrics(reg)
-        return QuboReportEnricher(props, mapper, DiceLeapPythonSolver(props, m), m)
+        val obs = QuboObservationHelper(ObservationRegistry.create())
+        return QuboReportEnricher(props, mapper, DiceLeapPythonSolver(props, m, obs), m)
     }
 
     @Test
