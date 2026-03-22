@@ -1,0 +1,15 @@
+{
+  "instance_id": "toy_dw_md",
+  "tier": "simple",
+  "description": "Entities and relationships from dwave.md example domain (A,B,C,Deploy_X).",
+  "entities": [
+    { "id": "A", "cost": 2, "signal": 5 },
+    { "id": "B", "cost": 3, "signal": 4 },
+    { "id": "C", "cost": 1, "signal": 3 },
+    { "id": "Deploy_X", "cost": 4, "signal": 2 }
+  ],
+  "conflicts": [["A", "B"]],
+  "dependencies": [["Deploy_X", "A"]],
+  "conflict_penalty": 5.0,
+  "dependency_penalty": 10.0
+}

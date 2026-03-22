@@ -35,6 +35,14 @@ The system consists of two primary Kotlin/Spring Boot modules:
 - **AI Parameter Tuning**: Track which parameter combinations (model, temperature, keywords) improve detection success across scenarios.
 - **Analysis Dashboard**: View test summaries, filter by scenario/status, and analyze trends over time.
 
+## Roadmap: QUBO / D-Wave PoC (Milestone 1)
+
+Exploratory work to treat **structured decision problems** as **QUBO** instances, solve them with **D-Wave Ocean** (local classical samplers first, optional **Leap** later), and feed results back into a reasoning-style loop—aligned with **[dwave.md](dwave.md)**.
+
+**Status:** Phase 1 Python PoC (`dice-leap-poc/`) includes local SA, **tiered fixtures**, **strategy rollover**, batch JSONL, and pytest acceptance. **Leap** and optional H2/UI wiring remain deferred.
+
+**Docs:** **[milestones/milestone-1.md](milestones/milestone-1.md)** · **[dice-leap-poc/README.md](dice-leap-poc/README.md)** · **[docs/DWAVE_REAL_WORLD_METRICS.md](docs/DWAVE_REAL_WORLD_METRICS.md)** (pilot logging plan).
+
 ## Setup
 
 ### Prerequisites
@@ -150,3 +158,4 @@ See [test-report-server/README.md](test-report-server/README.md) for detailed AP
 ## Documentation
 - [Architecture Diagrams](embabel-dice-rca/docs/architecture/README.md)
 - [PlantUML Setup Guide](docs/puml-setup.md)
+- [Milestone 1 — D-Wave / QUBO PoC](milestones/milestone-1.md) · [DICE + D-Wave concept spec](dwave.md)

@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/dice-leap-poc/solve_record",
+  "title": "SolveRecord",
+  "type": "object",
+  "required": [
+    "instance_id",
+    "solver_mode",
+    "strategy_choice",
+    "strategy_reason",
+    "n_vars",
+    "objective",
+    "selected_decisions",
+    "runtime_ms",
+    "baseline_objective",
+    "vs_baseline_delta"
+  ],
+  "properties": {
+    "instance_id": { "type": "string" },
+    "solver_mode": { "type": "string", "enum": ["local_classical", "leap_hybrid"] },
+    "strategy_choice": { "type": "string", "enum": ["heuristic_only", "qubo"] },
+    "strategy_reason": { "type": "string" },
+    "n_vars": { "type": "integer", "minimum": 0 },
+    "objective": { "type": "number" },
+    "selected_decisions": { "type": "array", "items": { "type": "string" } },
+    "runtime_ms": { "type": "number" },
+    "baseline_objective": { "type": "number" },
+    "vs_baseline_delta": { "type": "number" },
+    "tier": { "type": ["string", "null"] }
+  },
+  "additionalProperties": false
+}

@@ -1,6 +1,28 @@
 # Environment files with secrets
 .env
 
+# Python (dice-leap-poc)
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+.venv/
+venv/
+.env.venv
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+.eggs/
+dist/
+build/
+*.egg
+
+# D-Wave / Leap local config (Phase 2; do not commit tokens)
+.dwave/
+
+# dice-leap-poc generated runs (JSONL)
+dice-leap-poc/runs/
+
 # Build output
 target/
 
