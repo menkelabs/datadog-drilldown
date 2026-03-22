@@ -63,6 +63,8 @@ Uses root [`pom.xml`](pom.xml) as aggregator. You can still build a single modul
 
 **Branch protection:** see **[docs/CI_BRANCH_PROTECTION.md](docs/CI_BRANCH_PROTECTION.md)** for which GitHub Actions to mark **required** vs optional (e.g. Leap).
 
+**QUBO E2E smoke (local):** **[scripts/qubo-e2e-smoke.sh](scripts/qubo-e2e-smoke.sh)** — venv, toy solve, JVM subprocess test; see **[scripts/README.md](scripts/README.md)**.
+
 ### Configuration
 
 #### Environment Variables

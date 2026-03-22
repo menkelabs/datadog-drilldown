@@ -32,6 +32,16 @@ pip install -e ".[dev,leap]"
 export DWAVE_API_TOKEN="..."   # or `dwave setup`
 ```
 
+## One-shot smoke (repo root)
+
+From the **repository root** (Python venv + toy solve + optional JVM test):
+
+```bash
+./scripts/qubo-e2e-smoke.sh
+```
+
+See **[../scripts/README.md](../scripts/README.md)**.
+
 ## JVM bridge (Milestone 2a)
 
 `scripts/solve_json.py` solves a single instance file and prints one **SolveRecord** JSON line (for `embabel-dice-rca` subprocess integration). From `dice-leap-poc/`:
