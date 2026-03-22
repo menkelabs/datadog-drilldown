@@ -39,7 +39,7 @@ The system consists of two primary Kotlin/Spring Boot modules:
 
 **Milestone 1 (done):** PoC in **[dice-leap-poc/](dice-leap-poc/)** — QUBO compile, local SA, optional Leap, tiered/rollover fixtures, pytest, `SolveRecord` contract, JSONL + H2 lite + test-report UI, Kotlin JSONL types. See **[milestones/milestone-1.md](milestones/milestone-1.md)** and **[dwave.md](dwave.md)**.
 
-**Milestone 2 (next):** Live **DICE/RCA → QUBO** wiring in **`embabel-dice-rca`**, **telemetry** for real-world metrics (beyond the doc), **solver as an agent DAG node**, **opt-in Leap CI**, optional **Maven parent + umbrella Java CI**. See **[milestones/milestone-2.md](milestones/milestone-2.md)**.
+**Milestone 2 (next):** Live **DICE/RCA → QUBO** wiring in **`embabel-dice-rca`**, **telemetry** for real-world metrics (beyond the doc), **solver as an agent DAG node**, **opt-in Leap CI**, optional **Maven parent + umbrella Java CI**. See **[milestones/milestone-2.md](milestones/milestone-2.md)** (phased **M2a–M2d**: spine → observability → DAG → platform/CI).
 
 **Docs:** **[docs/DWAVE_REAL_WORLD_METRICS.md](docs/DWAVE_REAL_WORLD_METRICS.md)** (pilot logging plan; M2 implements emission).
 

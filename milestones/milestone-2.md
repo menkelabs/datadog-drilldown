@@ -4,6 +4,35 @@
 **Builds on:** [Milestone 1](milestone-1.md) (PoC, contract, optional Leap, JSONL/H2 lite, Kotlin ingest types)  
 **Spec:** [dwave.md](../dwave.md) · Metrics plan: [docs/DWAVE_REAL_WORLD_METRICS.md](../docs/DWAVE_REAL_WORLD_METRICS.md)
 
+## Phased delivery (M2a → M2d)
+
+Work is split so you can **ship a thin vertical slice first**, then **harden** with metrics and DAG shape, then **platform** CI/Maven.
+
+| Phase | Name | Intent | Exit criteria (suggested) |
+|-------|------|--------|---------------------------|
+| **M2a** | **Integration spine** | RCA context → instance → solver → result back into the agent path (behind flags). | End-to-end demo on **recorded** fixtures: JVM emits instance JSON, invokes solver (subprocess/HTTP per ADR), parses `SolveRecord`, updates context; IT green without live Datadog. |
+| **M2b** | **Observability** | Implement real-world metrics emission (not docs-only). | v1 field set logged or metered from solver path; sample queries or DD facets documented; links to JSONL/H2 where duplicated. |
+| **M2c** | **DAG node & resilience** | Solver as **explicit** workflow node + timeouts / fallback / idempotency. | Orchestration diagram or code shows named node; policy for failure ≠ hard fail (e.g. heuristic fallback); spans/metrics at node boundary. |
+| **M2d** | **Platform & CI** | Leap **opt-in** in CI; Maven umbrella + unified Java workflow. | Optional GH job when `DWAVE_API_TOKEN` set; root `pom.xml` (optional) + `java-modules.yml` (or equivalent) runs tests across Java modules with agreed skip-IT profile. |
+
+**Suggested order:** **M2a** first (proves value), **M2b** in parallel once the first solver call exists, **M2c** refactors M2a hook into a proper node, **M2d** anytime but often last to avoid blocking feature work.
+
+```mermaid
+flowchart LR
+  M2a[M2a Integration spine]
+  M2b[M2b Observability]
+  M2c[M2c DAG node]
+  M2d[M2d Platform CI]
+  M2a --> M2b
+  M2a --> M2c
+  M2b --> M2c
+  M2c --> M2d
+```
+
+*(M2b can start after M2a has a single solver invocation; M2d can proceed in parallel if resourced.)*
+
+---
+
 ## Purpose
 
 Close the gap between **synthetic PoC** and **production-shaped** behavior:
@@ -12,80 +41,77 @@ Close the gap between **synthetic PoC** and **production-shaped** behavior:
 2. **Keep Leap cloud opt-in** (`DWAVE_API_TOKEN`); optionally add **CI jobs** that run only when secrets are present (never block default PRs).
 3. **Implement** real-world metrics in **application/telemetry** (Milestone 1 only **documented** what to collect).
 4. Treat the **solver as an explicit node** in the **agent / workflow DAG** (not built today).
-5. **Repo engineering:** optional **Maven parent / aggregator** + **umbrella GitHub Actions** so **all** Java modules (`embabel-dice-rca`, `dice-server`, `test-report-server`, …) are built/tested on a defined schedule or path set (today: **per-module** POMs; workflows are **path-scoped**, not one unified Java pipeline).
+5. **Repo engineering:** optional **Maven parent / aggregator** + **umbrella GitHub Actions** for all Java modules (today: **per-module** POMs; **path-scoped** workflows only).
 
 ---
 
-## Work items (checklist)
+## Work items by phase (checklist)
 
-### A — Live DICE / RCA → QUBO path (`embabel-dice-rca`)
+### M2a — Integration spine (`embabel-dice-rca` + solver boundary)
 
-- [ ] **A1 — Instance model in JVM** — Map RCA artifacts (candidates, conflicts, deps, costs/signals) to a JSON schema compatible with `dice-leap-poc` / `SolveRecord` contract (reuse or version `encoding_version`).
-- [ ] **A2 — Extraction hook** — One bounded step in the investigation pipeline that **emits** an instance (file, message, or internal DTO) when rollover rules say QUBO is justified (mirror Python `strategy` semantics or call shared rules).
-- [ ] **A3 — Solver invocation** — Process boundary: **subprocess** to Python `dice-leap-poc` *or* **HTTP sidecar** *or* **ported compiler** in Kotlin (decision record in ADR). Start with smallest integration (e.g. JSON file + `ProcessBuilder` + JSONL parse back).
-- [ ] **A4 — Result interpreter** — Map `SolveRecord` / selected decisions back into agent context (propositions, next actions, or UI payload).
-- [ ] **A5 — Feature flags** — Disable-by-default in prod until acceptance; integration tests with **recorded** Datadog-style fixtures (not live API in CI).
+- [ ] **A1 — Instance model in JVM** — Map RCA artifacts (candidates, conflicts, deps, costs/signals) to JSON compatible with `dice-leap-poc` / `SolveRecord` contract (reuse or bump `encoding_version`).
+- [ ] **A2 — Extraction hook** — Bounded pipeline step that **emits** an instance when rollover rules justify QUBO (mirror Python `strategy` or shared rules).
+- [ ] **A3 — Solver invocation** — ADR: **subprocess** / **HTTP sidecar** / **Kotlin port**; smallest first (e.g. `ProcessBuilder` + JSONL parse).
+- [ ] **A4 — Result interpreter** — Map `SolveRecord` / selected decisions back into agent context (propositions, next actions, UI).
+- [ ] **A5 — Feature flags** — Default off in prod until acceptance; ITs use **recorded** fixtures (no live Datadog in CI).
 
-### B — Leap in CI / cloud (opt-in)
+### M2b — Observability (metrics implementation)
 
-- [ ] **B1 — Document** — README: token setup, quota, when to enable Leap vs local SA.
-- [ ] **B2 — Optional workflow** — e.g. `workflow_dispatch` or `pull_request` with **secret present** check; job installs `[leap]`, runs `pytest -m leap` or one smoke; **skip** if `DWAVE_API_TOKEN` missing.
-- [ ] **B3 — Never default** — Main branch protection stays **local-only** for `dice-leap-poc` PR checks unless team explicitly promotes Leap job to required.
+- [ ] **C1 — Field list** — Freeze v1 minimum from [DWAVE_REAL_WORLD_METRICS.md](../docs/DWAVE_REAL_WORLD_METRICS.md) (case id, encoding version, strategy, solver mode, latencies, deltas, errors).
+- [ ] **C2 — Emit** — Log / OTel / Micrometer (or structured logs) from JVM when solver runs; align with JSONL/H2 if duplicated.
+- [ ] **C3 — Dashboards / queries** — Optional: Datadog facets / Grafana; document example queries in repo.
 
-### C — Real-world metrics (implement, not only docs)
+### M2c — Agent DAG node & resilience
 
-- [ ] **C1 — Field list** — Freeze minimum set from [DWAVE_REAL_WORLD_METRICS.md](../docs/DWAVE_REAL_WORLD_METRICS.md) for v1 (case id, encoding version, strategy, solver mode, latencies, deltas, errors).
-- [ ] **C2 — Emit** — Log/OTel/Micrometer or structured logs from JVM path when solver runs; align with JSONL/H2 if duplicated.
-- [ ] **C3 — Dashboards / queries** — Optional: Datadog log facets or Grafana; document query examples in repo.
+- [ ] **D1 — Workflow model** — Identify Embabel/DICE orchestration; define solver **inputs/outputs** (instance in → `SolveRecord` out).
+- [ ] **D2 — Idempotency & timeouts** — Retries, cancellation, **fallback** to heuristic on failure (prod may differ from M1 fail-fast).
+- [ ] **D3 — Node observability** — Spans/metrics at node boundary (feeds **M2b**).
 
-### D — Solver as a node in the agent DAG
+### M2d — Leap CI + Maven / CI umbrella
 
-- [ ] **D1 — Workflow model** — Identify Embabel/DICE DAG or orchestration point; define **inputs/outputs** of the solver node (instance in → `SolveRecord` out).
-- [ ] **D2 — Idempotency & timeouts** — Node retries, cancellation, fallback to heuristic on failure (policy from M1 “fail fast” may differ in prod).
-- [ ] **D3 — Observability** — Node-level spans/metrics (ties to **C**).
-
-### E — Maven / CI umbrella
-
-- [ ] **E1 — Parent POM (optional)** — Root `pom.xml` packaging `pom` with `<modules>` for `embabel-dice-rca`, `dice-server`, `test-report-server` (and `dice-leap-poc` stays Python, not a module).
-- [ ] **E2 — Unified workflow** — `.github/workflows/java-modules.yml`: on push/PR to `main`, run `mvn -pl ... test` or full reactor; **cache** Maven; matrix Java 21.
-- [ ] **E3 — Path filters** — Either run full reactor always (slower, simpler) or smart `paths` + `dorny/paths-filter` to skip unchanged modules (team choice).
+- [ ] **B1 — Document** — Token setup, quota, when Leap vs local SA.
+- [ ] **B2 — Optional workflow** — `workflow_dispatch` or secret-gated job; `pytest -m leap` or smoke; **skip** if no `DWAVE_API_TOKEN`.
+- [ ] **B3 — Policy** — Default required checks remain **local-only** unless team promotes Leap job.
+- [ ] **E1 — Parent POM (optional)** — Root `pom.xml` with `<modules>`: `embabel-dice-rca`, `dice-server`, `test-report-server` (`dice-leap-poc` stays Python).
+- [ ] **E2 — Unified workflow** — e.g. `.github/workflows/java-modules.yml`: `mvn` test, cache, Java 21.
+- [ ] **E3 — Path strategy** — Full reactor vs path filters / `dorny/paths-filter` (team choice).
 
 ---
 
-## Goals
+## Goals (Milestone 2 overall)
 
-1. **End-to-end RCA → QUBO → back** on **realistic** (then real) data paths, behind flags.
-2. **Operable Leap** without compromising default CI cost/reliability.
-3. **Measurable** production pilots via implemented telemetry, not README-only.
-4. **Composable** agent design: solver is a **first-class** step, not a side script.
-5. **Maintainable** multi-module Java build and CI visibility.
+1. **End-to-end RCA → QUBO → back** on **realistic** (then real) data, behind flags (**M2a**).
+2. **Measurable** pilots via implemented telemetry (**M2b**).
+3. **Composable** agents: solver as a **first-class** step (**M2c**).
+4. **Operable Leap** + **maintainable** multi-module CI (**M2d**).
 
-## Non-goals (for Milestone 2 unless explicitly pulled in)
+## Non-goals (unless explicitly added)
 
 - Replacing the entire RCA stack with QUBO-only logic.
-- On-QPU production workloads (hybrid/Leap API only if chosen).
-- Perfect optimality guarantees on messy real graphs.
+- On-QPU production workloads.
+- Perfect optimality on messy real graphs.
 
 ## Dependencies
 
 - Stable **`SolveRecord`** + `encoding_version` (Milestone 1).
-- Agreement on **A3** integration style (subprocess vs service vs JVM port).
+- **A3** ADR locked early in **M2a**.
 
 ## Risks
 
-- Latency and **quota** for Leap; **PII** in logged instances (redaction policy).
-- **DAG** complexity: deadlocks, duplicate solver calls, stale context.
-- **Maven reactor** time and flaky ITs in `embabel-dice-rca` — umbrella job may need `-DskipITs` profile until stabilized.
+- Leap **latency/quota**; **PII** in logged instances.
+- **DAG** complexity (duplicate calls, stale context).
+- **Maven reactor** + flaky ITs — use `-DskipITs` profile until stable.
 
 ## References
 
-- [milestone-1.md](milestone-1.md) — completed PoC scope  
-- [dwave.md](../dwave.md) — architecture thesis  
-- [dice-leap-poc/README.md](../dice-leap-poc/README.md) — Python runbook  
-- [test-report-server/README.md](../test-report-server/README.md) — solver runs UI/API  
+- [milestone-1.md](milestone-1.md)  
+- [dwave.md](../dwave.md)  
+- [dice-leap-poc/README.md](../dice-leap-poc/README.md)  
+- [test-report-server/README.md](../test-report-server/README.md)  
 
 ---
 
 ## Plan evolution
 
-- **2026-01-25:** Milestone 2 drafted from gap analysis (live wiring, metrics implementation, DAG node, Leap CI opt-in, Maven umbrella).
+- **2026-01-25:** Milestone 2 drafted (gap analysis).
+- **2026-01-25:** Split into **M2a–M2d** phases with exit criteria and checklist mapping.

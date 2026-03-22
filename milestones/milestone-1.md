@@ -100,7 +100,7 @@ Details: [§ CI workflow spec](#ci-workflow-spec-m1a), [§ Leap adapter conventi
 | 6 | Leap adapter + creds-gated tests | **Done** (opt-in; CI local-only) |
 | 7 | Persist L2 (H2/API) | **Done (lite)** — `solver_runs` + sync + UI; see [milestone-2.md](milestone-2.md) for deeper retention/DAG |
 
-**Next roadmap:** [milestone-2.md](milestone-2.md) (live RCA wiring, metrics implementation, solver DAG node, Leap CI opt-in, Maven umbrella).
+**Next roadmap:** [milestone-2.md](milestone-2.md) — **M2a–M2d** phases (spine → metrics → DAG → platform/CI).
 
 ---
 
