@@ -566,11 +566,11 @@ embabel-dice-rca/
 │   │   └── dto/
 │   │       └── (existing DTOs)
 │   └── ...
+├── src/main/kotlin/com/example/rca/datadog/mock/   # current baseline (also used by mock-datadog-scenarios profile)
+│   ├── MockDatadogClient.kt
+│   └── TestScenarios.kt
 ├── src/test/kotlin/com/example/rca/
-│   ├── mock/
-│   │   └── MockDatadogClient.kt (enhanced)
-│   └── fixtures/
-│       └── TestScenarios.kt (enhanced)
+│   └── (tests import com.example.rca.datadog.mock.*)
 └── src/test/resources/
     └── scenarios/
         ├── database-pool-exhaustion.yaml

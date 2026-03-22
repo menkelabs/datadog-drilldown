@@ -1,6 +1,6 @@
 package com.example.rca.dice
 
-import com.example.rca.mock.MockDatadogClient
+import com.example.rca.datadog.mock.MockDatadogClient
 import kotlin.test.assertTrue
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.BeforeEach

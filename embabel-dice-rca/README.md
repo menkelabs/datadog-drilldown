@@ -17,7 +17,7 @@ This module provides an intelligent incident investigation assistant that:
 - Java 21+
 - Maven 3.8+
 - OpenAI API key (or Anthropic/Ollama for local models)
-- Datadog API credentials
+- Datadog API credentials **or** a Spring profile that uses a mock client (see below)
 
 ### Installation
 
@@ -43,6 +43,31 @@ export DD_API_KEY="your-datadog-api-key"
 export DD_APP_KEY="your-datadog-app-key"
 export DD_SITE="datadoghq.com"  # or datadoghq.eu, etc.
 ```
+
+### Datadog: real API vs local mocks
+
+| Profile | Implementation | When to use |
+|---------|----------------|-------------|
+| **default** + `DD_API_KEY` set | `RealHttpDatadogClient` | Production-like / real telemetry |
+| **`mock-datadog`** | `NoOpDatadogClient` (mostly empty) | No Datadog account; minimal stub |
+| **`mock-datadog-scenarios`** | `MockDatadogClient` + [`TestScenarios`](src/main/kotlin/com/example/rca/datadog/mock/TestScenarios.kt) | Rich fake incidents (logs, metrics, spans) without calling Datadog |
+
+Do **not** combine **`mock-datadog`** and **`mock-datadog-scenarios`** (both register a `@Primary` `DatadogClient`).
+
+**Example — OpenAI + scenario mock + optional real Dice:**
+
+```bash
+export SPRING_PROFILES_ACTIVE=mock-datadog-scenarios
+export OPENAI_API_KEY="sk-..."
+# Optional: which canned incident (default database-latency)
+export DATADOG_MOCK_ACTIVE_SCENARIO=downstream-failure   # or use datadog.mock.active-scenario in YAML
+export DICE_SERVER_URL="http://localhost:8080"
+# If dice-server also uses 8080, run RCA on another port:
+export SERVER_PORT=8081
+mvn spring-boot:run
+```
+
+Properties / YAML: `datadog.mock.active-scenario` = `database-latency` \| `downstream-failure` \| `memory-pressure` \| `healthy`. See [`application-mock-datadog-scenarios.yml`](src/main/resources/application-mock-datadog-scenarios.yml).
 
 ### Tracing (optional)
 

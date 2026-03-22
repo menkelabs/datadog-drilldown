@@ -7,8 +7,8 @@ import com.example.rca.dice.globalTestReportCollector
 import com.example.rca.dice.model.AlertSeverity
 import com.example.rca.dice.model.AlertTrigger
 import com.example.rca.dice.model.AlertType
-import com.example.rca.mock.MockDatadogClient
-import com.example.rca.mock.scenario
+import com.example.rca.datadog.mock.MockDatadogClient
+import com.example.rca.datadog.mock.scenario
 import java.time.Instant
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue

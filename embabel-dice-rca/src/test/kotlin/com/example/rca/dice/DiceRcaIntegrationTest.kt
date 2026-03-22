@@ -1,8 +1,8 @@
 package com.example.rca.dice
 
 import com.example.rca.datadog.dto.*
-import com.example.rca.mock.MockDatadogClient
-import com.example.rca.mock.scenario
+import com.example.rca.datadog.mock.MockDatadogClient
+import com.example.rca.datadog.mock.scenario
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import kotlin.test.assertTrue

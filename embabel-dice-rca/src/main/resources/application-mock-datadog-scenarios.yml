@@ -1,0 +1,15 @@
+# Activate with: spring.profiles.active=mock-datadog-scenarios
+# Realistic Datadog telemetry without HTTP (see DatadogConfig.scenarioMockDatadogClient).
+# Do not combine with profile mock-datadog (two @Primary DatadogClient beans).
+
+spring:
+  config:
+    activate:
+      on-profile: mock-datadog-scenarios
+
+datadog:
+  api-key: ""
+  app-key: ""
+  mock:
+    # database-latency | downstream-failure | memory-pressure | healthy
+    active-scenario: database-latency

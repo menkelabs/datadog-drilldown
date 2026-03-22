@@ -3,6 +3,8 @@ package com.example.rca.config
 import com.example.rca.datadog.DatadogClient
 import com.example.rca.datadog.dto.*
 import com.example.rca.datadog.impl.RealHttpDatadogClient
+import com.example.rca.datadog.mock.MockDatadogClient
+import com.example.rca.datadog.mock.TestScenarios
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.context.annotation.Bean
@@ -13,7 +15,10 @@ import java.time.Instant
 
 /**
  * Configuration for Datadog client.
- * Swaps between Real and Mock implementations based on Spring Profiles.
+ *
+ * - **default** + `datadog.api-key` → [RealHttpDatadogClient]
+ * - **mock-datadog** → [NoOpDatadogClient] (empty telemetry; do not combine with **mock-datadog-scenarios**)
+ * - **test** or **mock-datadog-scenarios** → [MockDatadogClient] with [TestScenarios] fixtures
  */
 @Configuration
 class DatadogConfig {
@@ -31,9 +36,32 @@ class DatadogConfig {
 
     @Bean
     @Primary
-    @Profile("test", "mock-datadog")
-    fun testDatadogClient(): DatadogClient {
-        // This will be overridden by MockDatadogClient in tests
+    @Profile("test", "mock-datadog-scenarios")
+    fun scenarioMockDatadogClient(
+        @Value("\${datadog.mock.active-scenario:database-latency}") activeScenario: String,
+    ): MockDatadogClient {
+        val allowed = setOf(
+            "database-latency",
+            "downstream-failure",
+            "memory-pressure",
+            "healthy",
+        )
+        require(activeScenario in allowed) {
+            "datadog.mock.active-scenario must be one of $allowed, got: $activeScenario"
+        }
+        val c = MockDatadogClient()
+        c.loadScenario("database-latency", TestScenarios.databaseLatencyScenario)
+        c.loadScenario("downstream-failure", TestScenarios.downstreamFailureScenario)
+        c.loadScenario("memory-pressure", TestScenarios.memoryPressureScenario)
+        c.loadScenario("healthy", TestScenarios.healthyScenario)
+        c.setActiveScenario(activeScenario)
+        return c
+    }
+
+    @Bean
+    @Primary
+    @Profile("mock-datadog")
+    fun noOpDatadogClient(): DatadogClient {
         return NoOpDatadogClient()
     }
 }

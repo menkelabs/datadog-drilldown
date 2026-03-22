@@ -1,21 +1,16 @@
-package com.example.rca.fixtures
+package com.example.rca.datadog.mock
 
 import com.example.rca.datadog.dto.*
-import com.example.rca.mock.DatadogScenario
-import com.example.rca.mock.scenario
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 
 /**
- * Pre-built test scenarios for integration testing.
+ * Pre-built Datadog mock scenarios for tests and `mock-datadog-scenarios` profile.
  */
 object TestScenarios {
 
     private val baseTime = Instant.parse("2026-01-15T12:00:00Z")
 
-    /**
-     * Scenario: High latency due to database connection pool exhaustion.
-     */
     val databaseLatencyScenario: DatadogScenario = scenario("database-latency") {
         description("High latency caused by database connection pool exhaustion")
         incidentStart(baseTime)
@@ -28,7 +23,6 @@ object TestScenarios {
             tags = listOf("service:api", "env:prod")
         ))
 
-        // Baseline: normal latency ~50ms
         baselineMetrics(MetricResponse(
             series = listOf(MetricSeries(
                 metric = "trace.api.request.duration",
@@ -41,7 +35,6 @@ object TestScenarios {
             ))
         ))
 
-        // Incident: latency spiked to ~500ms
         incidentMetrics(MetricResponse(
             series = listOf(MetricSeries(
                 metric = "trace.api.request.duration",
@@ -54,33 +47,29 @@ object TestScenarios {
             ))
         ))
 
-        // Baseline logs: minimal errors
         baselineLogs(listOf(
             createLogEntry(baseTime.minus(45, ChronoUnit.MINUTES), "Request completed", "info"),
             createLogEntry(baseTime.minus(40, ChronoUnit.MINUTES), "Request completed", "info")
         ))
 
-        // Incident logs: connection pool errors
         incidentLogs(listOf(
-            createErrorLogEntry(baseTime.plus(1, ChronoUnit.MINUTES), 
+            createErrorLogEntry(baseTime.plus(1, ChronoUnit.MINUTES),
                 "TimeoutError: Connection pool exhausted after 5000ms", "TimeoutError"),
-            createErrorLogEntry(baseTime.plus(2, ChronoUnit.MINUTES), 
+            createErrorLogEntry(baseTime.plus(2, ChronoUnit.MINUTES),
                 "TimeoutError: Connection pool exhausted after 5000ms", "TimeoutError"),
-            createErrorLogEntry(baseTime.plus(3, ChronoUnit.MINUTES), 
+            createErrorLogEntry(baseTime.plus(3, ChronoUnit.MINUTES),
                 "TimeoutError: Connection pool exhausted after 5000ms", "TimeoutError"),
-            createErrorLogEntry(baseTime.plus(5, ChronoUnit.MINUTES), 
+            createErrorLogEntry(baseTime.plus(5, ChronoUnit.MINUTES),
                 "SQLException: Unable to acquire connection from pool", "SQLException"),
-            createErrorLogEntry(baseTime.plus(10, ChronoUnit.MINUTES), 
+            createErrorLogEntry(baseTime.plus(10, ChronoUnit.MINUTES),
                 "TimeoutError: Connection pool exhausted after 5000ms", "TimeoutError")
         ))
 
-        // Baseline spans: normal latency
         baselineSpans(listOf(
             createServerSpan(baseTime.minus(45, ChronoUnit.MINUTES), "GET /users", 50_000_000),
             createClientSpan(baseTime.minus(45, ChronoUnit.MINUTES), "postgres.query", "postgres", 20_000_000)
         ))
 
-        // Incident spans: slow database calls
         incidentSpans(listOf(
             createServerSpan(baseTime.plus(2, ChronoUnit.MINUTES), "GET /users", 500_000_000),
             createClientSpan(baseTime.plus(2, ChronoUnit.MINUTES), "postgres.query", "postgres", 450_000_000, isError = true),
@@ -88,7 +77,6 @@ object TestScenarios {
             createClientSpan(baseTime.plus(5, ChronoUnit.MINUTES), "postgres.query", "postgres", 470_000_000, isError = true)
         ))
 
-        // Deploy event shortly before incident
         events(listOf(
             EventEntry(
                 id = 1001,
@@ -101,9 +89,6 @@ object TestScenarios {
         ))
     }
 
-    /**
-     * Scenario: Error rate spike due to downstream service failure.
-     */
     val downstreamFailureScenario: DatadogScenario = scenario("downstream-failure") {
         description("Error rate spike caused by downstream payment service failure")
         incidentStart(baseTime)
@@ -116,7 +101,6 @@ object TestScenarios {
             tags = listOf("service:api", "env:prod")
         ))
 
-        // Baseline: low error rate
         baselineMetrics(MetricResponse(
             series = listOf(MetricSeries(
                 metric = "trace.api.request.errors",
@@ -129,7 +113,6 @@ object TestScenarios {
             ))
         ))
 
-        // Incident: error rate spike
         incidentMetrics(MetricResponse(
             series = listOf(MetricSeries(
                 metric = "trace.api.request.errors",
@@ -142,12 +125,10 @@ object TestScenarios {
             ))
         ))
 
-        // Baseline logs
         baselineLogs(listOf(
             createLogEntry(baseTime.minus(45, ChronoUnit.MINUTES), "Payment processed successfully", "info")
         ))
 
-        // Incident logs: downstream errors
         incidentLogs(listOf(
             createErrorLogEntry(baseTime.plus(1, ChronoUnit.MINUTES),
                 "ConnectionError: Failed to connect to payment-service:8080", "ConnectionError"),
@@ -161,13 +142,11 @@ object TestScenarios {
                 "CircuitBreaker OPEN for payment-service", "CircuitBreakerOpen")
         ))
 
-        // Baseline spans
         baselineSpans(listOf(
             createServerSpan(baseTime.minus(45, ChronoUnit.MINUTES), "POST /checkout", 100_000_000),
             createClientSpan(baseTime.minus(45, ChronoUnit.MINUTES), "http.request", "payment-service", 50_000_000)
         ))
 
-        // Incident spans: failing calls to payment service
         incidentSpans(listOf(
             createServerSpan(baseTime.plus(2, ChronoUnit.MINUTES), "POST /checkout", 5000_000_000, isError = true),
             createClientSpan(baseTime.plus(2, ChronoUnit.MINUTES), "http.request", "payment-service", 5000_000_000, isError = true),
@@ -176,9 +155,6 @@ object TestScenarios {
         ))
     }
 
-    /**
-     * Scenario: Memory pressure causing OOM errors.
-     */
     val memoryPressureScenario: DatadogScenario = scenario("memory-pressure") {
         description("Memory pressure causing OOM errors and degraded performance")
         incidentStart(baseTime)
@@ -191,7 +167,6 @@ object TestScenarios {
             tags = listOf("service:api", "env:prod")
         ))
 
-        // Baseline: normal memory ~60%
         baselineMetrics(MetricResponse(
             series = listOf(MetricSeries(
                 metric = "jvm.heap.used",
@@ -204,7 +179,6 @@ object TestScenarios {
             ))
         ))
 
-        // Incident: memory at 95%+
         incidentMetrics(MetricResponse(
             series = listOf(MetricSeries(
                 metric = "jvm.heap.used",
@@ -217,12 +191,10 @@ object TestScenarios {
             ))
         ))
 
-        // Baseline logs
         baselineLogs(listOf(
             createLogEntry(baseTime.minus(45, ChronoUnit.MINUTES), "GC completed: 15ms pause", "info")
         ))
 
-        // Incident logs: OOM and GC issues
         incidentLogs(listOf(
             createErrorLogEntry(baseTime.plus(1, ChronoUnit.MINUTES),
                 "GC overhead limit exceeded - long pause 5000ms", "GCOverhead"),
@@ -234,13 +206,9 @@ object TestScenarios {
                 "GC overhead limit exceeded - long pause 8000ms", "GCOverhead")
         ))
 
-        // No APM available for this scenario
         apmError("APM data unavailable during high memory pressure")
     }
 
-    /**
-     * Scenario: No significant issues (baseline check).
-     */
     val healthyScenario: DatadogScenario = scenario("healthy") {
         description("Healthy system with no significant issues")
         incidentStart(baseTime)
@@ -253,7 +221,6 @@ object TestScenarios {
             tags = listOf("service:api", "env:prod")
         ))
 
-        // Both periods show similar healthy metrics
         val healthyMetrics = MetricResponse(
             series = listOf(MetricSeries(
                 metric = "system.load.1",
@@ -269,7 +236,6 @@ object TestScenarios {
         baselineMetrics(healthyMetrics)
         incidentMetrics(healthyMetrics)
 
-        // Minimal logs in both periods
         val healthyLogs = listOf(
             createLogEntry(baseTime.minus(30, ChronoUnit.MINUTES), "Health check passed", "info"),
             createLogEntry(baseTime.plus(5, ChronoUnit.MINUTES), "Health check passed", "info")
@@ -278,7 +244,6 @@ object TestScenarios {
         baselineLogs(healthyLogs)
         incidentLogs(healthyLogs)
 
-        // Normal spans
         val healthySpans = listOf(
             createServerSpan(baseTime, "GET /health", 5_000_000),
             createClientSpan(baseTime, "redis.ping", "redis", 1_000_000)
@@ -287,8 +252,6 @@ object TestScenarios {
         baselineSpans(healthySpans)
         incidentSpans(healthySpans)
     }
-
-    // Helper functions
 
     private fun createLogEntry(
         timestamp: Instant,

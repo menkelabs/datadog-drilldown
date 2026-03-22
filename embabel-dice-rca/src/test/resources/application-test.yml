@@ -4,11 +4,13 @@ spring:
   main:
     banner-mode: off
 
-# Disable real Datadog in tests
+# Disable real Datadog in tests; use MockDatadogClient + TestScenarios (see DatadogConfig)
 datadog:
   api-key: ""
   app-key: ""
   site: datadoghq.com
+  mock:
+    active-scenario: database-latency
 
 # Embabel configuration for tests
 embabel:

@@ -12,9 +12,9 @@ import com.example.rca.dice.IngestResponse
 import com.example.rca.dice.DiceProposition
 import com.example.rca.dice.model.*
 import com.example.rca.domain.*
-import com.example.rca.fixtures.TestScenarios
+import com.example.rca.datadog.mock.MockDatadogClient
+import com.example.rca.datadog.mock.TestScenarios
 import com.example.rca.testsupport.disabledQuboReportEnricher
-import com.example.rca.mock.MockDatadogClient
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.context.ApplicationEventPublisher

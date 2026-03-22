@@ -1,4 +1,4 @@
-package com.example.rca.mock
+package com.example.rca.datadog.mock
 
 import com.example.rca.datadog.DatadogClient
 import com.example.rca.datadog.DatadogException
@@ -7,53 +7,37 @@ import java.time.Instant
 import java.time.temporal.ChronoUnit
 
 /**
- * Mock Datadog client for integration testing.
- * 
- * Supports loading different scenarios to simulate various incident types.
+ * Mock [DatadogClient] for integration tests and local runs (`mock-datadog-scenarios` profile).
+ * Load scenarios with [loadScenario], then [setActiveScenario].
  */
 class MockDatadogClient : DatadogClient {
 
     private val scenarios = mutableMapOf<String, DatadogScenario>()
     private var activeScenarioName: String? = null
 
-    /**
-     * Load a scenario for testing.
-     */
     fun loadScenario(name: String, scenario: DatadogScenario) {
         scenarios[name] = scenario
     }
 
-    /**
-     * Set the active scenario.
-     */
     fun setActiveScenario(name: String) {
         require(name in scenarios) { "Scenario '$name' not loaded" }
         activeScenarioName = name
     }
 
-    /**
-     * Get the currently active scenario.
-     */
     private val activeScenario: DatadogScenario
         get() = scenarios[activeScenarioName]
             ?: throw IllegalStateException("No active scenario set")
 
-    /**
-     * Clear all scenarios.
-     */
     fun clearScenarios() {
         scenarios.clear()
         activeScenarioName = null
     }
-
-    // DatadogClient implementation
 
     override fun getMonitor(monitorId: Long): MonitorResponse {
         return activeScenario.monitor
     }
 
     override fun queryMetrics(query: String, start: Instant, end: Instant): MetricResponse {
-        // Return baseline or incident metrics based on time range
         val isBaseline = end < activeScenario.incidentStart
         return if (isBaseline) {
             activeScenario.baselineMetrics
@@ -87,7 +71,7 @@ class MockDatadogClient : DatadogClient {
         if (activeScenario.apmError != null) {
             throw DatadogException(activeScenario.apmError!!)
         }
-        
+
         val isBaseline = end < activeScenario.incidentStart
         return if (isBaseline) {
             activeScenario.baselineSpans
@@ -101,9 +85,6 @@ class MockDatadogClient : DatadogClient {
     }
 }
 
-/**
- * A scenario containing mock data for a specific incident type.
- */
 data class DatadogScenario(
     val name: String,
     val description: String,
@@ -119,9 +100,6 @@ data class DatadogScenario(
     val apmError: String? = null
 )
 
-/**
- * Builder for creating test scenarios.
- */
 class ScenarioBuilder(private val name: String) {
     private var description: String = ""
     private var incidentStart: Instant = Instant.now().minus(30, ChronoUnit.MINUTES)
@@ -136,35 +114,35 @@ class ScenarioBuilder(private val name: String) {
     private var apmError: String? = null
 
     fun description(desc: String) = apply { this.description = desc }
-    
+
     fun incidentStart(start: Instant) = apply { this.incidentStart = start }
-    
+
     fun monitor(monitor: MonitorResponse) = apply { this.monitor = monitor }
-    
+
     fun baselineMetrics(metrics: MetricResponse) = apply { this.baselineMetrics = metrics }
-    
+
     fun incidentMetrics(metrics: MetricResponse) = apply { this.incidentMetrics = metrics }
-    
+
     fun baselineLogs(logs: List<LogEntry>) = apply { this.baselineLogs = logs.toMutableList() }
-    
+
     fun incidentLogs(logs: List<LogEntry>) = apply { this.incidentLogs = logs.toMutableList() }
-    
+
     fun addBaselineLog(log: LogEntry) = apply { this.baselineLogs.add(log) }
-    
+
     fun addIncidentLog(log: LogEntry) = apply { this.incidentLogs.add(log) }
-    
+
     fun baselineSpans(spans: List<SpanEntry>) = apply { this.baselineSpans = spans.toMutableList() }
-    
+
     fun incidentSpans(spans: List<SpanEntry>) = apply { this.incidentSpans = spans.toMutableList() }
-    
+
     fun addBaselineSpan(span: SpanEntry) = apply { this.baselineSpans.add(span) }
-    
+
     fun addIncidentSpan(span: SpanEntry) = apply { this.incidentSpans.add(span) }
-    
+
     fun events(events: List<EventEntry>) = apply { this.events = events.toMutableList() }
-    
+
     fun addEvent(event: EventEntry) = apply { this.events.add(event) }
-    
+
     fun apmError(error: String?) = apply { this.apmError = error }
 
     fun build(): DatadogScenario = DatadogScenario(

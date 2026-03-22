@@ -4,7 +4,7 @@ import com.example.rca.datadog.DatadogClient
 import com.example.rca.datadog.dto.*
 import com.example.rca.dice.model.*
 import com.example.rca.domain.*
-import com.example.rca.mock.MockDatadogClient
+import com.example.rca.datadog.mock.MockDatadogClient
 import org.slf4j.LoggerFactory
 import java.time.Duration
 import java.time.Instant
